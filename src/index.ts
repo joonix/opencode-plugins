@@ -14,7 +14,7 @@ type Compaction = Extract<Message, { type: "compaction" }> & { readonly summary:
 
 interface Options {
   readonly modelRef: string
-  readonly model: { readonly providerID: string; readonly id: string }
+  readonly model: { readonly providerID: string; readonly id: string; readonly variant?: string }
   readonly timeoutMs: number
   readonly policy: string
   readonly escalationMode: "ask" | "deny"
@@ -125,6 +125,11 @@ function parseOptions(raw: Readonly<Record<string, unknown>>): Options {
   const separator = modelRef.indexOf("/")
   if (separator <= 0 || separator === modelRef.length - 1) fail(`option "model" must be "provider/model", got "${modelRef}"`)
 
+  const variant = raw.variant
+  if (variant !== undefined && (typeof variant !== "string" || variant.trim() === "")) {
+    fail(`option "variant" must be a non-empty string`)
+  }
+
   const timeoutMs = raw.timeoutMs ?? DEFAULT_TIMEOUT_MS
   if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0) fail(`option "timeoutMs" must be a positive number`)
 
@@ -139,7 +144,7 @@ function parseOptions(raw: Readonly<Record<string, unknown>>): Options {
 
   return {
     modelRef,
-    model: { providerID: modelRef.slice(0, separator), id: modelRef.slice(separator + 1) },
+    model: { providerID: modelRef.slice(0, separator), id: modelRef.slice(separator + 1), variant },
     timeoutMs,
     policy,
     escalationMode,
@@ -390,6 +395,7 @@ export default Plugin.define({
         source: outcome.source,
         durationMs: Date.now() - started,
         model: options.modelRef,
+        variant: options.model.variant ?? null,
       }
       if (options.audit) await guard("audit write", () => appendAudit(options.auditPath, entry))
       await guard("storage write", () => ctx.storage.set("last", entry))

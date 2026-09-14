@@ -57,6 +57,7 @@ Add it to `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.
       "package": "/Users/johnny/Documents/Joonix/opencode-reviewer",
       "options": {
         "model": "openai/gpt-5.6-terra-fast",
+        "variant": "medium",
         "timeoutMs": 120000,
         "escalationMode": "deny",
         "audit": true,
@@ -79,6 +80,7 @@ following start. `make test-load` handles that for you.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `model` | `openai/gpt-5.6-terra-fast` | Reviewer model as `provider/model` |
+| `variant` | unset | Optional catalog variant such as `medium` |
 | `timeoutMs` | `60000` | Deadline for the review call |
 | `policy` | `""` | Appended to the built-in reviewer instructions |
 | `escalationMode` | `"ask"` | What to do on timeout, error, unparseable reply, or a model `ask` |

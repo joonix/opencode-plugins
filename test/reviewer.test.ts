@@ -18,6 +18,7 @@ interface Harness {
   readonly stored: Record<string, unknown>
   readonly emitted: { name: string; data: Record<string, unknown> }[]
   readonly prompts: string[]
+  readonly models: { providerID: string; id: string; variant?: string }[]
   generated: number
   evaluate: (event: PermissionEvaluation) => Promise<void>
 }
@@ -38,14 +39,16 @@ async function start(
     stored: {},
     emitted: [],
     prompts: [],
+    models: [],
     generated: 0,
   }
   const ctx = {
     options: { audit: false, ...options },
     generate: {
-      text: (input: { prompt: string }) => {
+      text: (input: { prompt: string; model: { providerID: string; id: string; variant?: string } }) => {
         harness.generated++
         harness.prompts.push(input.prompt)
+        harness.models.push(input.model)
         return generate()
       },
     },
@@ -129,6 +132,12 @@ test("denies on a deny decision", async () => {
   await harness.evaluate(event)
   expect(event.effect).toBe("deny")
   expect(event.message).toBe("pushes to origin")
+})
+
+test("passes the configured model variant to generation", async () => {
+  const harness = await start({ variant: "medium" }, replies(`{"decision":"allow","reason":"read-only"}`))
+  await harness.evaluate(ask())
+  expect(harness.models).toEqual([{ providerID: "openai", id: "gpt-5.6-terra-fast", variant: "medium" }])
 })
 
 test("parses a decision wrapped in prose and fences", async () => {
@@ -356,5 +365,6 @@ test("appends one audit line per reviewed request", async () => {
     reason: "read-only",
     source: "reviewer",
     model: "openai/gpt-5.6-terra-fast",
+    variant: null,
   })
 })
