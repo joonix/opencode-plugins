@@ -103,12 +103,11 @@ and `brake` went through `escalationMode`.
 
 ## Status line
 
-The terminal half (`src/tui.tsx`, plugin id `opencode-reviewer-tui`) appends one line to the
-`prompt.footer.status` slot, for example `reviewer: allowed shell git status · 1.4s`. It reads
-decisions from the server plugin over the RPC `opencode-reviewer` (event `reviewed`), because an
-auto-allowed request never emits `permission.asked`. Decisions are kept per root session, so a
-sub-agent's decision shows on the session you are looking at, and nothing renders until the first
-decision in that session.
+The terminal half (`src/tui.tsx`, plugin id `opencode-reviewer-tui`) temporarily appends
+`reviewer: reviewing <action>` to the `prompt.footer.status` slot while a model review is running.
+It removes the status as soon as the verdict arrives, so a previous decision cannot look like it
+belongs to the next tool call. Concurrent reviews are tracked independently, including reviews
+started by sub-agents and displayed on their root session.
 
 ## Develop
 

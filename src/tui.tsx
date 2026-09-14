@@ -2,59 +2,69 @@ import { Plugin } from "@opencode/plugin/tui"
 import { createSignal, Show } from "solid-js"
 import { Reviewer } from "./rpc"
 
-interface Entry {
+interface Progress {
+  readonly reviewID: string
   readonly rootSessionID: string
   readonly action: string
-  readonly resource: string
-  readonly decision: string
-  readonly durationMs: number
 }
 
-const VERBS: Readonly<Record<string, string>> = { allow: "allowed", deny: "denied", ask: "asked" }
-const MAX_RESOURCE = 32
+interface ReviewStart {
+  readonly reviewID: string
+  readonly sessionID: string
+  readonly action: string
+}
 
-function toEntry(data: Readonly<Record<string, unknown>>): Entry | undefined {
-  const { rootSessionID, action, resource, decision, durationMs } = data
-  if (
-    typeof rootSessionID !== "string" ||
-    typeof action !== "string" ||
-    typeof resource !== "string" ||
-    typeof decision !== "string" ||
-    typeof durationMs !== "number"
-  ) {
-    console.error("opencode-reviewer-tui: unexpected reviewed event payload")
+function toReviewStart(data: Readonly<Record<string, unknown>>): ReviewStart | undefined {
+  const { reviewID, sessionID, action } = data
+  if (typeof reviewID !== "string" || typeof sessionID !== "string" || typeof action !== "string") {
+    console.error("opencode-reviewer-tui: unexpected reviewing event payload")
     return undefined
   }
-  return { rootSessionID, action, resource, decision, durationMs }
+  return { reviewID, sessionID, action }
 }
 
-function label(entry: Entry): string {
-  const verb = VERBS[entry.decision] ?? entry.decision
-  const resource = entry.resource.length <= MAX_RESOURCE ? entry.resource : `${entry.resource.slice(0, MAX_RESOURCE)}...`
-  const seconds = (entry.durationMs / 1000).toFixed(1)
-  return `reviewer: ${verb} ${entry.action} ${resource} · ${seconds}s`.trimEnd()
+export function label(progress: Progress): string {
+  return `reviewer: reviewing ${progress.action}`
 }
 
 export default Plugin.define({
   id: "opencode-reviewer-tui",
   setup(context) {
-    // Keyed by the root session the server resolved: decisions arrive from
-    // child sessions too, and the footer only knows the session it shows.
-    const [last, setLast] = createSignal<Readonly<Record<string, Entry>>>({})
-    const current = (sessionID: string | undefined) => (sessionID === undefined ? undefined : last()[sessionID])
+    const [active, setActive] = createSignal<Readonly<Record<string, Progress>>>({})
+    const current = (sessionID: string | undefined) =>
+      sessionID === undefined ? undefined : Object.values(active()).find((progress) => progress.rootSessionID === sessionID)
 
-    const stop = context.client.rpc(Reviewer).events.on("reviewed", (event) => {
-      const entry = toEntry(event.data)
-      if (entry === undefined) return
-      setLast((entries) => ({ ...entries, [entry.rootSessionID]: entry }))
+    const rpc = context.client.rpc(Reviewer)
+    const stopReviewing = rpc.events.on("reviewing", (event) => {
+      const start = toReviewStart(event.data)
+      if (start === undefined) return
+      const progress = { ...start, rootSessionID: context.data.session.root(start.sessionID) }
+      setActive((entries) => ({ ...entries, [progress.reviewID]: progress }))
+    })
+    const stopReviewed = rpc.events.on("reviewed", (event) => {
+      const reviewID = event.data.reviewID
+      if (typeof reviewID !== "string") {
+        console.error("opencode-reviewer-tui: unexpected reviewed event payload")
+        return
+      }
+      setActive((entries) => {
+        const next = { ...entries }
+        delete next[reviewID]
+        return next
+      })
     })
     const removeSlot = context.ui.slot({
       append: "prompt.footer.status",
-      render: (input) => <Show when={current(input.sessionID)}>{(entry: () => Entry) => <text>{label(entry())}</text>}</Show>,
+      render: (input) => (
+        <Show when={current(input.sessionID)}>
+          {(progress: () => Progress) => <text wrapMode="none">{label(progress())}</text>}
+        </Show>
+      ),
     })
 
     return () => {
-      stop()
+      stopReviewing()
+      stopReviewed()
       removeSlot()
     }
   },

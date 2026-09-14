@@ -6,10 +6,23 @@ export const Reviewer = Rpc.define({
   id: "opencode-reviewer",
   methods: {},
   events: {
+    reviewing: {
+      schema: {
+        type: "object",
+        properties: {
+          reviewID: { type: "string" },
+          sessionID: { type: "string" },
+          action: { type: "string" },
+        },
+        required: ["reviewID", "sessionID", "action"],
+        additionalProperties: false,
+      },
+    },
     reviewed: {
       schema: {
         type: "object",
         properties: {
+          reviewID: { type: "string" },
           sessionID: { type: "string" },
           rootSessionID: { type: "string" },
           action: { type: "string" },
@@ -18,7 +31,7 @@ export const Reviewer = Rpc.define({
           reason: { type: "string" },
           durationMs: { type: "number" },
         },
-        required: ["sessionID", "rootSessionID", "action", "resource", "decision", "reason", "durationMs"],
+        required: ["reviewID", "sessionID", "rootSessionID", "action", "resource", "decision", "reason", "durationMs"],
         additionalProperties: false,
       },
     },

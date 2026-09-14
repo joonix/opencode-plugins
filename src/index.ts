@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin"
 import type { PermissionEvaluation } from "@opencode/plugin/promise/permission"
 import { appendFile, mkdir } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { Reviewer } from "./rpc"
@@ -354,6 +355,7 @@ export default Plugin.define({
     const hook = await ctx.permission.hook("evaluate", async (event) => {
       if (event.effect !== "ask") return
       const started = Date.now()
+      const reviewID = randomUUID()
 
       const braked = event.resources.some((resource) => BRAKES.some((pattern) => pattern.test(resource)))
       const key = braked ? undefined : cacheKey(event)
@@ -363,6 +365,13 @@ export default Plugin.define({
         outcome = { decision: "ask", reason: "destructive pattern, never auto-reviewed", source: "brake", rootSessionID: event.sessionID }
       } else if (hit !== undefined) outcome = { ...hit, source: "cached" }
       else {
+        await guard("reviewing event emit", () =>
+          rpc.events.emit("reviewing", {
+            reviewID,
+            sessionID: event.sessionID,
+            action: event.action,
+          }),
+        )
         outcome = await review(ctx, options, event)
         if (key !== undefined && CACHEABLE.includes(outcome.source)) remember(cache, key, outcome, Date.now())
       }
@@ -386,6 +395,7 @@ export default Plugin.define({
       await guard("storage write", () => ctx.storage.set("last", entry))
       await guard("event emit", () =>
         rpc.events.emit("reviewed", {
+          reviewID,
           sessionID: entry.sessionID,
           rootSessionID: outcome.rootSessionID,
           action: entry.action,

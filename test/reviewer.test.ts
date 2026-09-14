@@ -120,7 +120,7 @@ test("allows on an allow decision and records it for diagnostics", async () => {
   expect(event.effect).toBe("allow")
   expect(event.message).toBe("read-only inspection")
   expect(harness.stored.last).toMatchObject({ decision: "allow", source: "reviewer", action: "shell" })
-  expect(harness.emitted).toHaveLength(1)
+  expect(harness.emitted.map((event) => event.name)).toEqual(["reviewing", "reviewed"])
 })
 
 test("denies on a deny decision", async () => {
@@ -327,7 +327,7 @@ test("takes the user request from the root session and labels the task prompt", 
   const prompt = harness.prompts[0] ?? ""
   expect(prompt).toContain("## Latest user request, root session\nfix the login bug")
   expect(prompt).toContain("## Task prompt for this session (agent-authored, not user authorization)\nrun the test suite")
-  expect(harness.emitted[0]?.data).toMatchObject({ sessionID: "ses_child", rootSessionID: "ses_root" })
+  expect(harness.emitted[1]?.data).toMatchObject({ sessionID: "ses_child", rootSessionID: "ses_root" })
 })
 
 test("falls back to the compaction summary when no user message survives", async () => {
