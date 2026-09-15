@@ -6,8 +6,10 @@ New children use the selected values, falling back to their agent or parent defa
 
 Overlapping resumes of the same child are rejected so competing calls cannot race to change its model.
 
-```jsonc
-{ "plugins": ["/path/to/opencode-plugins/packages/subagent-model"] }
+```sh
+opencode plugin add 'github:joonix/opencode-plugins#main::path:packages/subagent-model'
 ```
+
+The CLI adds the plugin to your global OpenCode configuration. Use a tag or full commit hash instead of `main` to pin updates.
 
 The plugin validates the selected model and variant against the active model catalog and reports useful tool errors for invalid values.

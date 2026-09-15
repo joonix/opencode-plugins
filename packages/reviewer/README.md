@@ -56,14 +56,20 @@ every other failure escalates and is recorded.
 
 ## Configure
 
-Add it to `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.jsonc`):
+Install the plugin directly from this repository:
+
+```sh
+opencode plugin add 'github:joonix/opencode-plugins#main::path:packages/reviewer'
+```
+
+The CLI adds it to your global OpenCode configuration. To set reviewer options, replace that entry with the object form in `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.jsonc`):
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "/path/to/opencode-plugins/packages/reviewer",
+      "package": "github:joonix/opencode-plugins#main::path:packages/reviewer",
       "options": {
         "model": "openai/gpt-5.6-terra-fast",
         "variant": "medium",
