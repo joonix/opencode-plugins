@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "description": "Per-call model and reasoning variant overrides for OpenCode subagents",
+  "description": "Model and reasoning variant selection for OpenCode child sessions",
   "publishConfig": { "access": "public" },
   "exports": { ".": "./index.ts" },
   "scripts": {
@@ -12,6 +12,7 @@
   "devDependencies": {
     "@opencode/plugin": "2.0.3",
     "@types/bun": "1.4.0",
+    "effect": "4.0.0-rc.112",
     "typescript": "5.8.2"
   }
 }

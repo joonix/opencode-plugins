@@ -11,6 +11,5 @@ printf '{ "plugins": ["%s"] }\n' "$PLUGIN_DIR" > "$XDG_CONFIG_HOME/opencode/open
 "$OPENCODE" service set port "$((49500 + RANDOM % 400))" >/dev/null
 for _ in 1 2; do "$OPENCODE" service restart >/dev/null 2>&1; "$OPENCODE" debug agents >/dev/null; done
 LOG="$XDG_DATA_HOME/opencode/log/opencode.log"
-grep -q "loading plugin.*id=$PLUGIN_DIR " "$LOG"
-! grep -qE "failed to load plugin.*(opencode-subagent-model|target=$PLUGIN_DIR)" "$LOG"
+"$PLUGIN_DIR/scripts/check-load-log.sh" "$LOG" "$PLUGIN_DIR"
 echo "load check ok: $PLUGIN_DIR"
