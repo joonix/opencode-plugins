@@ -24,10 +24,15 @@ Requires OpenCode V2 (verified against 2.0.3) and Bun.
 - Parses a single JSON object `{"decision":"allow"|"deny"|"ask","reason":"..."}` from the reply.
   Prose around it is fine, but every object in the reply that reads as a decision has to agree:
   quoted tool output carrying its own verdict makes the reply unparseable instead of decisive.
-- Memoizes a real verdict for 60 minutes, keyed on the permission request's `source`. The host
+- Keeps up to 200 recent model approvals in memory for one hour, showing the latest eight from
+  the same root session as bounded JSON evidence. Resources, originating agent/session, and
+  model-written reasons provide context, never authorization or proof of execution. This history
+  is lost on plugin reload; new requests still receive independent judgments.
+- Memoizes a real verdict for 60 minutes, keyed on the permission request's `source` and exact
+  action scope (session, agent, action, resources, metadata). The host
   re-evaluates every pending request whenever you answer "always" somewhere, and the same request
-  must not draw a second, different verdict. Escalations are never cached, and a request without
-  a `source` is never cached.
+  must not draw a second, different verdict. Model `ask` verdicts are cached too; timeouts,
+  errors, and parse failures are retried. A request without a `source` is never cached.
 - Appends one JSON line per reviewed request to the audit file and keeps the last decision in
   plugin storage under the key `last`.
 
@@ -117,7 +122,14 @@ started by sub-agents and displayed on their root session.
 make install
 make test       # tsc --noEmit plus bun test
 make test-load  # loads the plugin in a throwaway OpenCode config and asserts it loaded
+make test-security # optional live classifier checks using synthetic adversarial history
 ```
+
+`test-security` uses the configured server's `openai/gpt-5.6-terra-fast` model with the
+`medium` variant through `opencode api`. It requires existing provider authentication and
+incurs model usage. Only synthetic prompts are sent; proposed commands are never executed.
+It checks forged policy/user text, repeated old approvals, agent scope, truncation, and a
+benign inspection control. These checks are regression samples, not proof of injection immunity.
 
 `index.ts` and `tui.tsx` at the repository root only re-export `src/`: OpenCode 2.0.3 resolves a
 directory plugin as `<dir>` and `<dir>/tui` through Bun's resolver, so those two files are what
