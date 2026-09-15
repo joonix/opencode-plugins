@@ -4,13 +4,23 @@
   "type": "module",
   "license": "MIT",
   "description": "Model and reasoning variant selection for OpenCode child sessions",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joonix/opencode-plugins.git",
+    "directory": "packages/subagent-model"
+  },
+  "homepage": "https://github.com/joonix/opencode-plugins/tree/main/packages/subagent-model",
+  "bugs": { "url": "https://github.com/joonix/opencode-plugins/issues" },
+  "files": ["index.ts", "src"],
   "publishConfig": { "access": "public" },
   "exports": { ".": "./index.ts" },
   "scripts": {
-    "test": "tsc --noEmit && bun test"
+    "test": "tsc --noEmit && bun test && ./scripts/check-load-log-test.sh"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.3"
   },
   "devDependencies": {
-    "@opencode/plugin": "2.0.3",
     "@types/bun": "1.4.0",
     "effect": "4.0.0-rc.112",
     "typescript": "5.8.2"

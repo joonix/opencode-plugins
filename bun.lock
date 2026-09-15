@@ -12,8 +12,10 @@
     "packages/reviewer": {
       "name": "@joonix/opencode-reviewer",
       "version": "0.1.0",
-      "devDependencies": {
+      "dependencies": {
         "@opencode/plugin": "2.0.3",
+      },
+      "devDependencies": {
         "@opentui/core": "0.5.10",
         "@opentui/solid": "0.5.10",
         "@types/bun": "1.4.0",
@@ -34,8 +36,10 @@
     "packages/subagent-model": {
       "name": "@joonix/opencode-subagent-model",
       "version": "0.1.0",
-      "devDependencies": {
+      "dependencies": {
         "@opencode/plugin": "2.0.3",
+      },
+      "devDependencies": {
         "@types/bun": "1.4.0",
         "effect": "4.0.0-rc.112",
         "typescript": "5.8.2",

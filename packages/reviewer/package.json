@@ -4,6 +4,14 @@
   "type": "module",
   "license": "MIT",
   "description": "Reviews OpenCode V2 ask permissions with an LLM before a prompt is shown",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joonix/opencode-plugins.git",
+    "directory": "packages/reviewer"
+  },
+  "homepage": "https://github.com/joonix/opencode-plugins/tree/main/packages/reviewer",
+  "bugs": { "url": "https://github.com/joonix/opencode-plugins/issues" },
+  "files": ["index.ts", "tui.tsx", "src", "tsconfig.json"],
   "publishConfig": { "access": "public" },
   "exports": {
     ".": "./index.ts",
@@ -11,6 +19,9 @@
   },
   "scripts": {
     "test": "tsc --noEmit && bun test"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.3"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.5.10",
@@ -29,7 +40,6 @@
     }
   },
   "devDependencies": {
-    "@opencode/plugin": "2.0.3",
     "@opentui/core": "0.5.10",
     "@opentui/solid": "0.5.10",
     "@types/bun": "1.4.0",

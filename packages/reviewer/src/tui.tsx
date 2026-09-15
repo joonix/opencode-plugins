@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 import { Plugin } from "@opencode/plugin/tui"
 import { createSignal, Show } from "solid-js"
 import { Reviewer } from "./rpc"

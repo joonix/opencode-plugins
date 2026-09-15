@@ -2,6 +2,9 @@
   "name": "opencode-plugins",
   "private": true,
   "type": "module",
+  "license": "MIT",
+  "repository": "github:joonix/opencode-plugins",
+  "packageManager": "bun@1.2.22",
   "workspaces": ["packages/*"],
   "devDependencies": {
     "@opencode/plugin": "2.0.3",

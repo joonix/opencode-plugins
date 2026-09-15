@@ -6,6 +6,10 @@ small model, and turns the model's verdict into `allow`, `deny`, or a prompt for
 
 Requires OpenCode V2 (verified against 2.0.3) and Bun.
 
+> [!IMPORTANT]
+> This plugin is not a security boundary. An LLM can make incorrect permission decisions. Keep
+> explicit OpenCode `deny` rules for destructive, privileged, or externally visible actions.
+
 ## What it does
 
 - Runs only on requests whose rule-computed effect is `ask`. A configured `allow` or `deny` is
@@ -59,7 +63,7 @@ Add it to `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "/Users/johnny/Documents/Joonix/opencode-plugins/packages/reviewer",
+      "package": "/path/to/opencode-plugins/packages/reviewer",
       "options": {
         "model": "openai/gpt-5.6-terra-fast",
         "variant": "medium",

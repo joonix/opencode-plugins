@@ -5,7 +5,7 @@ Small, independently installable OpenCode V2 plugins maintained in one Bun works
 | Package | Purpose |
 | --- | --- |
 | `packages/reviewer` | Reviews permission requests with an LLM before prompting the user. |
-| `packages/subagent-model` | Lets a parent select the model and reasoning variant for each subagent call. |
+| `packages/subagent-model` | Lets a parent select the model and reasoning variant for a child session. |
 
 Each package can be installed by its directory path. Published packages remain independent even though they share this repository.
 
@@ -17,3 +17,15 @@ Each package can be installed by its directory path. Published packages remain i
   ]
 }
 ```
+
+## Develop
+
+Requires Bun 1.2.22 or newer and OpenCode V2.
+
+```sh
+bun install --frozen-lockfile
+make test
+make test-load
+```
+
+`make test-load` requires an installed `opencode2` executable. It uses disposable configuration and data directories.
