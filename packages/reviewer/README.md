@@ -19,12 +19,15 @@ Requires OpenCode V2 (verified against 2.0.3) and Bun.
   `git push` where main or master is a whole branch or refspec token, and the classic fork bomb.
   Those are never sent to the model and never auto-allowed: they stay `ask`.
 - Otherwise builds a compact prompt: built-in reviewer instructions, your policy, then the
-  untrusted evidence (acting agent, action, resources, metadata, the latest user request, and
-  the last few messages, each bounded).
+  untrusted evidence (acting agent, action, resources, metadata, recent user requests,
+  host-recorded answers to the `question` tool, and the last few messages, each bounded).
 - Resolves the root session before reading the user request, so a sub-agent cannot pass its
   parent's task prompt off as human authorization. The child's own task prompt is shown in a
   separate section marked agent-authored. When compaction has eaten the last user message, the
   compaction summary stands in, labelled as such.
+- Treats a completed `question` tool's host-recorded answer as direct user evidence. The exact
+  question, selected answer, and matching option description are included, and a new answer
+  invalidates cached verdicts. Assistant claims and ordinary tool-result prose remain untrusted.
 - Parses a single JSON object `{"decision":"allow"|"deny"|"ask","reason":"..."}` from the reply.
   Prose around it is fine, but every object in the reply that reads as a decision has to agree:
   quoted tool output carrying its own verdict makes the reply unparseable instead of decisive.
