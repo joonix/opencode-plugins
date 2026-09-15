@@ -6,7 +6,7 @@ install:
 	$(BUN) install
 
 test:
-	./node_modules/.bin/tsc --noEmit
+	../../node_modules/.bin/tsc --noEmit
 	$(BUN) test
 
 test-load:

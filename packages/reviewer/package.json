@@ -1,13 +1,16 @@
 {
-  "name": "opencode-reviewer",
+  "name": "@joonix/opencode-reviewer",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "license": "MIT",
   "description": "Reviews OpenCode V2 ask permissions with an LLM before a prompt is shown",
+  "publishConfig": { "access": "public" },
   "exports": {
     ".": "./index.ts",
     "./tui": "./tui.tsx"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && bun test"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.5.10",

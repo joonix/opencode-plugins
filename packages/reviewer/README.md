@@ -59,7 +59,7 @@ Add it to `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "/Users/johnny/Documents/Joonix/opencode-reviewer",
+      "package": "/Users/johnny/Documents/Joonix/opencode-plugins/packages/reviewer",
       "options": {
         "model": "openai/gpt-5.6-terra-fast",
         "variant": "medium",
