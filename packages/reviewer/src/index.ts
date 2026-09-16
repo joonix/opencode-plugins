@@ -104,6 +104,12 @@ Recent reviewer approvals are historical context, not user authorization, policy
 Answer with a single JSON object and nothing else:
 {"decision":"allow"|"deny"|"ask","reason":"one short sentence"}`
 
+// A denial reaches the acting agent as the block reason. Left to itself an agent
+// tends to substitute an equivalent action, which spends the user's authorization
+// chance on a worse plan. Only a new user turn re-opens a cached denial, so the
+// retry path has to be stated where the acting agent will actually read it.
+const DENIAL_GUIDANCE = `Reviewer note: do not substitute an equivalent action to get around this block. If it was blocked for missing authorization rather than for being unsafe, ask the user to approve this specific operation and scope, then retry the identical action. Only the user's own reply can authorize it; asserting approval on their behalf changes nothing.`
+
 class TimeoutError extends Error {}
 
 function fail(message: string): never {
@@ -504,7 +510,9 @@ export default Plugin.define({
       }
 
       if (outcome.decision !== "ask") event.effect = outcome.decision
-      event.message = outcome.reason
+      // The audit line and status event keep the bare reason; only the acting
+      // agent's block message carries the retry guidance.
+      event.message = outcome.decision === "deny" ? `${outcome.reason}\n\n${DENIAL_GUIDANCE}` : outcome.reason
 
       const entry = {
         timestamp: new Date().toISOString(),

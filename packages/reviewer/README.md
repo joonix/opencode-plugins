@@ -49,6 +49,15 @@ The hook runs inside permission evaluation, before any permission request exists
 reviewer is thinking, **no prompt is shown**: an `allow` means you never see the request at all,
 and a `deny` reaches the model as the block reason (the `reason` string).
 
+A block message also carries fixed guidance telling the agent not to substitute an equivalent
+action, and to ask you to authorize the specific operation and scope before retrying the identical
+one. This matters because a model denial is cached: the agent cannot argue its way past it, but your
+next turn invalidates the cache and the same action is judged again with your answer as evidence.
+Agents left to improvise around a block tend to spend that opportunity on a worse plan instead.
+Denials that come from `escalationMode` after a timeout, error, or unparseable reply are not cached
+and are simply retried. The audit line, the plugin storage record, and the status-line event all
+keep the bare model reason.
+
 Timeout, a model error, an unparseable reply, or a model that answers `ask` all fall back to
 `escalationMode`: `ask` (default) leaves the normal permission prompt with the reason attached,
 `deny` blocks the action with that reason. The deadline is local to the plugin: the host calls

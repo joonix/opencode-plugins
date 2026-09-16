@@ -292,7 +292,62 @@ test("denies on a deny decision", async () => {
   const event = ask({ resources: ["git push origin feature"] })
   await harness.evaluate(event)
   expect(event.effect).toBe("deny")
-  expect(event.message).toBe("pushes to origin")
+  expect(event.message).toContain("pushes to origin")
+})
+
+// A block message is the acting agent's only view of a denial: the model's
+// reason first, then exactly one plugin-authored note, so neither can be read
+// as the other.
+function blockMessage(message: string | undefined): { reason: string; notes: string[] } {
+  const parts = (message ?? "").split("\n\n")
+  return { reason: parts[0] ?? "", notes: parts.slice(1) }
+}
+
+test("tells a blocked agent to ask and retry instead of substituting an action", async () => {
+  const harness = await start({}, replies(`{"decision":"deny","reason":"pushes to origin"}`))
+  const event = ask({ resources: ["git push origin feature"] })
+  await harness.evaluate(event)
+  const { reason, notes } = blockMessage(event.message)
+  expect(reason).toBe("pushes to origin")
+  expect(notes).toHaveLength(1)
+  expect(notes[0]).toContain("do not substitute an equivalent action")
+  expect(notes[0]).toContain("retry the identical action")
+  expect(notes[0]).toContain("Only the user's own reply can authorize it")
+  // The records stay quotable as the model's own verdict.
+  expect(harness.stored.last).toMatchObject({ decision: "deny", reason: "pushes to origin" })
+  expect(harness.emitted[1]?.data).toMatchObject({ reason: "pushes to origin" })
+})
+
+test("every denied outcome carries the reason and the guidance exactly once", async () => {
+  const cases: { name: string; generate: Generate }[] = [
+    { name: "reviewer", generate: replies(`{"decision":"deny","reason":"pushes to origin"}`) },
+    { name: "uncertain", generate: replies(`{"decision":"ask","reason":"scope unclear"}`) },
+    { name: "parse", generate: replies("{") },
+    { name: "error", generate: async () => { throw new Error("provider unreachable") } },
+    { name: "timeout", generate: never },
+  ]
+  for (const { name, generate } of cases) {
+    const harness = await start({ escalationMode: "deny", timeoutMs: 20 }, generate)
+    const event = ask()
+    await harness.evaluate(event)
+    const { reason, notes } = blockMessage(event.message)
+    expect({ name, effect: event.effect, notes: notes.length }).toEqual({ name, effect: "deny", notes: 1 })
+    expect({ name, reason }).not.toEqual({ name, reason: "" })
+    expect({ name, stored: harness.stored.last }).toMatchObject({ name, stored: { decision: "deny", reason } })
+  }
+})
+
+test("outcomes that still prompt carry no guidance", async () => {
+  const allowing = await start({}, replies(`{"decision":"allow","reason":"read-only inspection"}`))
+  const allowed = ask()
+  await allowing.evaluate(allowed)
+  expect(allowed.message).toBe("read-only inspection")
+
+  const braking = await start({}, replies(`{"decision":"allow","reason":"trust me"}`))
+  const braked = ask({ resources: ["rm -rf /"] })
+  await braking.evaluate(braked)
+  expect(braked.effect).toBe("ask")
+  expect(blockMessage(braked.message).notes).toHaveLength(0)
 })
 
 test("passes the configured model variant to generation", async () => {
@@ -315,7 +370,7 @@ test("ignores braces in prose around a single decision object", async () => {
   const event = ask()
   await harness.evaluate(event)
   expect(event.effect).toBe("deny")
-  expect(event.message).toBe("writes outside the workspace")
+  expect(event.message).toContain("writes outside the workspace")
 })
 
 test("accepts repeated decision objects that agree", async () => {
@@ -370,7 +425,7 @@ test("records a model ask as uncertain and applies escalationMode", async () => 
   const event = ask()
   await harness.evaluate(event)
   expect(event.effect).toBe("deny")
-  expect(event.message).toBe("scope unclear")
+  expect(event.message).toContain("scope unclear")
   expect(harness.stored.last).toMatchObject({ decision: "deny", source: "uncertain" })
 })
 
@@ -523,6 +578,7 @@ test("agent-authored retry text cannot bypass a cached denial", async () => {
   await harness.evaluate(retry)
   expect(first.effect).toBe("deny")
   expect(retry.effect).toBe("deny")
+  expect(retry.message).toContain("Only the user's own reply can authorize it")
   expect(harness.generated).toBe(1)
 })
 
