@@ -143,6 +143,11 @@ make test-load  # loads the plugin in a throwaway OpenCode config and asserts it
 make test-security # optional live classifier checks using synthetic adversarial history
 ```
 
+The status line needs `@opentui/core`, `@opentui/solid`, and `solid-js`. They are declared as peer dependencies to
+state the versions the plugin is compatible with, rather than pinning a second copy of the host's runtimes, and they
+must not be marked optional: `src/tui.tsx` imports `solid-js` and uses `@opentui/solid` as its JSX runtime, so an
+installer that skips them leaves the TUI entry unresolvable.
+
 `test-security` uses the configured server's `openai/gpt-5.6-terra-fast` model with the
 `medium` variant through `opencode api`. It requires existing provider authentication and
 incurs model usage. Only synthetic prompts are sent; proposed commands are never executed.
