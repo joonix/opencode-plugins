@@ -108,6 +108,11 @@ following start. `make test-load` handles that for you.
 Invalid option values fail the plugin load with an explicit error rather than falling back to a
 default. The host logs it as `failed to load plugin plugin.id=opencode-reviewer`.
 
+The default model requires the `openai` provider to be authenticated and offering
+`gpt-5.6-terra-fast`. Set `model` to any authenticated `provider/model` instead. A model that is
+unavailable at review time is not a silent failure: the review call errors and the request follows
+`escalationMode`, which by default leaves you the normal permission prompt.
+
 ## Audit file
 
 One JSON object per line:
@@ -144,7 +149,8 @@ incurs model usage. Only synthetic prompts are sent; proposed commands are never
 It checks forged policy/user text, repeated old approvals, agent scope, truncation, and a
 benign inspection control. These checks are regression samples, not proof of injection immunity.
 
-OpenCode 2.0.4 loads the package through its `exports` map, so `src/index.ts` and `src/tui.tsx`
-are the entrypoints the host resolves. The `index.ts` and `tui.tsx` files at the package root only
-re-export `src/` as a fallback for a host that resolves a plugin directory as `<dir>` and
-`<dir>/tui` instead.
+Entry resolution depends on how the plugin is configured. A package entry such as
+`@joonix/opencode-reviewer` resolves through the `exports` map to `src/index.ts` and `src/tui.tsx`.
+A directory entry, which is what the local development setup above uses, resolves `<dir>` and
+`<dir>/tui` instead, so the `index.ts` and `tui.tsx` files at the package root re-export `src/` to
+keep that path working. Both forms are exercised: `make test-load` covers the directory form.

@@ -39,6 +39,7 @@ make test       # tsc --noEmit, bun test, and the load-log check
 make test-load  # loads the plugin in a throwaway OpenCode config and asserts it loaded
 ```
 
-OpenCode 2.0.4 loads the package through its `exports` map, so `src/index.ts` is the entrypoint the host resolves.
-The `index.ts` file at the package root only re-exports `src/` as a fallback for a host that resolves a plugin
-directory as `<dir>` instead.
+Entry resolution depends on how the plugin is configured. A package entry such as
+`@joonix/opencode-subagent-model` resolves through the `exports` map to `src/index.ts`. A directory entry, used when
+developing against a local checkout, resolves `<dir>` instead, so the `index.ts` file at the package root re-exports
+`src/` to keep that path working.
