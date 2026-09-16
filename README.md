@@ -9,17 +9,19 @@ Small, independently installable OpenCode V2 plugins maintained in one Bun works
 
 ## Install
 
-[OpenCode's plugin manager](https://opencode.ai/v2/docs/plugins#manage) accepts npm-compatible Git package specifications, including packages in monorepo subdirectories:
+Install either plugin from npm with [OpenCode's plugin manager](https://opencode.ai/v2/docs/plugins#manage):
 
 ```sh
-opencode plugin add 'github:joonix/opencode-plugins#main::path:packages/reviewer'
-opencode plugin add 'github:joonix/opencode-plugins#main::path:packages/subagent-model'
+opencode plugin add @joonix/opencode-reviewer
+opencode plugin add @joonix/opencode-subagent-model
 opencode plugin list
 ```
 
-Use a tag or full commit hash instead of `main` when you want to pin updates. See the package README files for configuration and behavior.
+Append `@<version>` to pin a release. See the package README files for configuration and behavior.
 
-OpenCode 2.0.3 has a Git dependency preparation issue with monorepo subdirectory packages. If `plugin add` reports `git dep preparation failed` on that release, clone this repository and use the local configuration below.
+Installing from a Git specification does not work for this repository. OpenCode's installer ignores npm's `::path:`
+subdirectory selector and installs the repository root, which is not a plugin package. Use npm or the local
+configuration below.
 
 ## Local development
 
@@ -34,7 +36,7 @@ Clone the repository and configure either package by its directory path:
 }
 ```
 
-Requires Bun 1.2.22 or newer and OpenCode V2.
+Requires Bun 1.2.22 or newer and OpenCode 2.0.4 or newer.
 
 ```sh
 bun install --frozen-lockfile
@@ -43,3 +45,15 @@ make test-load
 ```
 
 `make test-load` requires an installed `opencode2` executable. It uses disposable configuration and data directories.
+
+## Release
+
+Publishing is manual and per package, from a clean checkout of `main`:
+
+```sh
+cd packages/reviewer
+npm publish --access public
+```
+
+Both packages ship TypeScript sources; there is no build step. Bump the package `version` and tag the commit as
+`<package>-v<version>` before publishing.

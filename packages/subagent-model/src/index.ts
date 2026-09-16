@@ -58,7 +58,7 @@ export default Plugin.define({
 
       const agentID = String(input.agent)
       const [catalog, session] = await Promise.all([
-        ctx.catalog.model.list(),
+        ctx.model.list(),
         ctx.session.get({ sessionID: resumedSessionID ?? event.sessionID }),
       ])
       const agent = !resumedSessionID || session.agent !== agentID ? await ctx.agent.get({ agentID }) : undefined

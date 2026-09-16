@@ -44,13 +44,11 @@ async function start(options: { switchFailure?: Error } = {}): Promise<Harness> 
         return { dispose: async () => {} }
       },
     },
-    catalog: {
-      model: {
-        list: async () => ({ data: [
-          { providerID: "openai", id: "default", variants: [{ id: "low" }, { id: "high" }] },
-          { providerID: "anthropic", id: "fast", variants: [{ id: "high" }] },
-        ] }),
-      },
+    model: {
+      list: async () => ({ data: [
+        { providerID: "openai", id: "default", variants: [{ id: "low" }, { id: "high" }] },
+        { providerID: "anthropic", id: "fast", variants: [{ id: "high" }] },
+      ] }),
     },
     agent: {
       get: async ({ agentID }: { agentID: string }) => {

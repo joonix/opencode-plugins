@@ -13,12 +13,12 @@
   "bugs": { "url": "https://github.com/joonix/opencode-plugins/issues" },
   "files": ["index.ts", "src"],
   "publishConfig": { "access": "public" },
-  "exports": { ".": "./index.ts" },
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
     "test": "tsc --noEmit && bun test && ./scripts/check-load-log-test.sh"
   },
   "dependencies": {
-    "@opencode/plugin": "2.0.3"
+    "@opencode/plugin": "2.0.4"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",

@@ -14,14 +14,14 @@
   "files": ["index.ts", "tui.tsx", "src", "tsconfig.json"],
   "publishConfig": { "access": "public" },
   "exports": {
-    ".": "./index.ts",
-    "./tui": "./tui.tsx"
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
   },
   "scripts": {
     "test": "tsc --noEmit && bun test"
   },
   "dependencies": {
-    "@opencode/plugin": "2.0.3"
+    "@opencode/plugin": "2.0.4"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.5.10",

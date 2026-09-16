@@ -4,7 +4,7 @@ An OpenCode V2 plugin that reviews every permission request that would otherwise
 you. It hooks `permission.evaluate`, sends the pending action plus the session evidence to a
 small model, and turns the model's verdict into `allow`, `deny`, or a prompt for you.
 
-Requires OpenCode V2 (verified against 2.0.3) and Bun.
+Requires OpenCode V2 (verified against 2.0.4) and Bun.
 
 > [!IMPORTANT]
 > This plugin is not a security boundary. An LLM can make incorrect permission decisions. Keep
@@ -59,10 +59,10 @@ every other failure escalates and is recorded.
 
 ## Configure
 
-Install the plugin directly from this repository:
+Install the plugin from npm:
 
 ```sh
-opencode plugin add 'github:joonix/opencode-plugins#main::path:packages/reviewer'
+opencode plugin add @joonix/opencode-reviewer
 ```
 
 The CLI adds it to your global OpenCode configuration. To set reviewer options, replace that entry with the object form in `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.jsonc`):
@@ -72,7 +72,7 @@ The CLI adds it to your global OpenCode configuration. To set reviewer options, 
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "github:joonix/opencode-plugins#main::path:packages/reviewer",
+      "package": "@joonix/opencode-reviewer",
       "options": {
         "model": "openai/gpt-5.6-terra-fast",
         "variant": "medium",
@@ -89,7 +89,7 @@ The CLI adds it to your global OpenCode configuration. To set reviewer options, 
 Remove the V1 plugin from the `plugin` array first (`opencode-permission-reviewer`). Running both
 means two reviewers on the same request.
 
-Plugin list changes take effect one service generation later on 2.0.3: after editing the config,
+Plugin list changes can take effect one service generation later: after editing the config,
 restart the background service (`opencode service restart`) and expect the new set on the
 following start. `make test-load` handles that for you.
 
@@ -144,6 +144,7 @@ incurs model usage. Only synthetic prompts are sent; proposed commands are never
 It checks forged policy/user text, repeated old approvals, agent scope, truncation, and a
 benign inspection control. These checks are regression samples, not proof of injection immunity.
 
-`index.ts` and `tui.tsx` at the repository root only re-export `src/`: OpenCode 2.0.3 resolves a
-directory plugin as `<dir>` and `<dir>/tui` through Bun's resolver, so those two files are what
-the host loads. `exports` lists the same two paths for a future host that reads it.
+OpenCode 2.0.4 loads the package through its `exports` map, so `src/index.ts` and `src/tui.tsx`
+are the entrypoints the host resolves. The `index.ts` and `tui.tsx` files at the package root only
+re-export `src/` as a fallback for a host that resolves a plugin directory as `<dir>` and
+`<dir>/tui` instead.
