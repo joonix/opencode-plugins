@@ -19,10 +19,9 @@ opencode plugin add @joonix/opencode-commands
 opencode plugin list
 ```
 
-Append `@<version>` to pin a release. The package README files cover configuration and behavior.
-
-Git specifications do not work for this repository: OpenCode's installer ignores npm's `::path:`
-subdirectory selector and installs the repository root, which is not a plugin package.
+Append `@<version>` to pin a release; each package README covers configuration and behavior. Git
+specifications do not work here: OpenCode's installer ignores npm's `::path:` subdirectory selector
+and installs the repository root, which is not a plugin package.
 
 ## Update
 
@@ -37,8 +36,9 @@ unaffected by it.
 
 ## Local development
 
-Requires Bun 1.2.22 or newer and OpenCode 2.0.4 or newer. Clone the repository and configure any
-package by its directory path:
+Requires Bun 1.2.22 or newer and OpenCode 2.0.4 or newer. Configure a package by its directory path,
+which shadows the published package. Use directory entries for every package you develop locally;
+mixing one with an npm entry runs two versions of this repository side by side.
 
 ```jsonc
 {
@@ -50,18 +50,12 @@ package by its directory path:
 }
 ```
 
-A directory entry shadows the published package, so use it for every package you develop locally:
-mixing a local checkout with an npm entry runs two different versions of this repository side by
-side.
-
 ```sh
 bun install --frozen-lockfile
 make test
 make test-load
 ```
 
-`make test-load` requires an installed `opencode2` executable and uses disposable configuration and
-data directories.
-
-Maintainers publish with `make publish`, which runs the suite first. Bump each package `version`
-beforehand; a version already on the registry fails the publish.
+`make test-load` needs an installed `opencode2` executable and uses disposable configuration and data
+directories. Maintainers publish with `make publish`, which runs the suite first; bump each package
+`version` beforehand, since a version already on the registry fails the publish.
