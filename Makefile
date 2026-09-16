@@ -25,10 +25,21 @@ test-load-%:
 # one package publishes that one alone: make publish-reviewer. Publishing every
 # package remains available for a release that bumps all of them. Check every
 # version before publishing any package to avoid a partial release.
-check-publish: $(PACKAGES:%=check-publish-%)
-
-publish: check-publish test test-load
+check-publish:
 	@for package in $(PACKAGES); do \
+		$(NODE) scripts/check-publish-version.mjs packages/$$package "$(NPM)" --aggregate; status=$$?; \
+		if [ $$status -ne 0 ] && [ $$status -ne 3 ]; then exit $$status; fi; \
+	done
+
+publish: test test-load
+	@candidates=""; \
+	for package in $(PACKAGES); do \
+		$(NODE) scripts/check-publish-version.mjs packages/$$package "$(NPM)" --aggregate; status=$$?; \
+		if [ $$status -eq 0 ]; then candidates="$$candidates $$package"; \
+		elif [ $$status -ne 3 ]; then exit $$status; fi; \
+	done; \
+	if [ -z "$$candidates" ]; then echo "No unpublished package versions to publish."; exit 0; fi; \
+	for package in $$candidates; do \
 		$(MAKE) -C packages/$$package publish || exit $$?; \
 	done
 
