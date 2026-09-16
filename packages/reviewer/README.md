@@ -106,6 +106,18 @@ Plugin list changes can take effect one service generation later: after editing 
 restart the background service (`opencode service restart`) and expect the new set on the
 following start. `make test-load` handles that for you.
 
+### Update
+
+```sh
+opencode plugin check   # report package plugins that have a newer release
+opencode plugin update  # update package plugins to their latest release
+```
+
+`update` applies to package entries. A pinned `@<version>` entry stays pinned, and a directory
+entry tracks the checkout rather than the registry, so neither is changed by it. The running
+service picks up the new version on its own; restart it only if the change does not appear. Your
+`options` block is part of your own configuration and survives an update untouched.
+
 ### Options
 
 | Option | Default | Meaning |

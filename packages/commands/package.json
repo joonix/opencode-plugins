@@ -1,0 +1,38 @@
+{
+  "name": "@joonix/opencode-commands",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Overrides and adds OpenCode V2 slash commands, starting with an in-place /clear",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joonix/opencode-plugins.git",
+    "directory": "packages/commands"
+  },
+  "homepage": "https://github.com/joonix/opencode-plugins/tree/main/packages/commands",
+  "bugs": { "url": "https://github.com/joonix/opencode-plugins/issues" },
+  "files": ["index.ts", "tui.tsx", "src", "tsconfig.json"],
+  "publishConfig": { "access": "public" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && bun test"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.4"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.10",
+    "@opentui/solid": ">=0.5.10",
+    "solid-js": ">=1.9.0"
+  },
+  "devDependencies": {
+    "@opentui/core": "0.5.10",
+    "@opentui/solid": "0.5.10",
+    "@types/bun": "1.4.0",
+    "solid-js": "1.9.15",
+    "typescript": "5.8.2"
+  }
+}
