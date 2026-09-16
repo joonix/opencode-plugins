@@ -1,6 +1,6 @@
 {
   "name": "@joonix/opencode-reviewer",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Reviews OpenCode V2 ask permissions with an LLM before a prompt is shown",
