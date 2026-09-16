@@ -58,5 +58,5 @@ make test-load
 
 `make test-load` needs an installed `opencode2` executable and uses disposable configuration and data
 directories. Maintainers publish with `make publish`, which runs the suite and each package's load
-check first; bump each package `version` beforehand, since a version already on the registry fails
-the publish.
+check first. The publish preflight rejects a version already on npm and suggests the next patch;
+bump the package manifest and refresh `bun.lock` before retrying.

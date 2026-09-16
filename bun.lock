@@ -30,7 +30,7 @@
     },
     "packages/reviewer": {
       "name": "@joonix/opencode-reviewer",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@opencode/plugin": "2.0.4",
       },
