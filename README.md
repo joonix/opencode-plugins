@@ -46,22 +46,5 @@ make test-load
 
 `make test-load` requires an installed `opencode2` executable. It uses disposable configuration and data directories.
 
-## Release
-
-Publishing is manual and per package, from a clean checkout of `main`:
-
-```sh
-(cd packages/reviewer && npm publish --access public)
-(cd packages/subagent-model && npm publish --access public)
-```
-
-Both packages ship TypeScript sources; there is no build step. Bump the package `version` and tag the commit before
-publishing, using one tag per released package:
-
-```sh
-git tag reviewer-v0.1.0
-git tag subagent-model-v0.1.0
-```
-
-Packages are published under the `@joonix` scope. `publishConfig.access` is already `public`, so a first scoped
-publish does not default to restricted.
+Maintainers release both packages with `make publish`, which runs the suite first. Bump each package `version`
+beforehand; a version already on the registry fails the publish.
