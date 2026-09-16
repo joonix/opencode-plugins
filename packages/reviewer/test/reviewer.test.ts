@@ -22,6 +22,7 @@ interface Harness {
   readonly prompts: string[]
   readonly models: { providerID: string; id: string; variant?: string }[]
   generated: number
+  context: (event: { sessionID: string; system: { type: "text"; text: string }[] }) => Promise<void>
   evaluate: (event: PermissionEvaluation) => Promise<void>
 }
 
@@ -36,7 +37,10 @@ async function start(
   generate: Generate,
   sessions: Readonly<Record<string, FakeSession>> = DEFAULT_SESSIONS,
 ): Promise<Harness> {
-  const harness: Omit<Harness, "evaluate"> & { evaluate?: Harness["evaluate"] } = {
+  const harness: Omit<Harness, "context" | "evaluate"> & {
+    context?: Harness["context"]
+    evaluate?: Harness["evaluate"]
+  } = {
     hooks: [],
     stored: {},
     emitted: [],
@@ -61,6 +65,11 @@ async function start(
         return { id: sessionID, parentID: session.parentID }
       },
       context: async ({ sessionID }: { sessionID: string }) => sessions[sessionID]?.messages ?? [],
+      hook: async (name: string, callback: Harness["context"]) => {
+        expect(name).toBe("context")
+        harness.context = callback
+        return { dispose: async () => {} }
+      },
     },
     storage: {
       set: async (key: string, value: unknown) => {
@@ -267,6 +276,33 @@ test("registers the evaluate hook", async () => {
   expect(harness.hooks).toEqual(["evaluate"])
 })
 
+test("applies explicit root-user approval to an exception in trusted harness instructions", async () => {
+  const instructionText = "Deploy production only with explicit operator permission."
+  const classify: Generate = async ({ prompt }) => ({
+    text: JSON.stringify(prompt.includes("Deploy the support MCP service to production now using make mcp_deploy.")
+      ? { decision: "allow", reason: "explicit approval satisfies the harness rule" }
+      : { decision: "deny", reason: "production deployment lacks explicit operator permission" }),
+  })
+  const sessions = {
+    ses_test: { messages: [{ type: "user", text: "Prepare the production release." }] },
+    ses_approved: { messages: [{ type: "user", text: "Deploy the support MCP service to production now using make mcp_deploy." }] },
+  }
+  const harness = await start({}, classify, sessions)
+  for (const sessionID of Object.keys(sessions)) {
+    await harness.context({ sessionID, system: [{ type: "text", text: instructionText }] })
+  }
+
+  const denied = ask({ sessionID: "ses_test" as PermissionEvaluation["sessionID"], resources: ["make mcp_deploy"] })
+  const allowed = ask({ sessionID: "ses_approved" as PermissionEvaluation["sessionID"], resources: ["make mcp_deploy"] })
+  await harness.evaluate(denied)
+  await harness.evaluate(allowed)
+
+  expect(denied.effect).toBe("deny")
+  expect(allowed.effect).toBe("allow")
+  expect(harness.prompts[0]).toContain("# TRUSTED HARNESS INSTRUCTIONS")
+  expect(harness.prompts[0]).toContain(instructionText)
+})
+
 test("leaves rule-computed allow and deny untouched", async () => {
   const harness = await start({}, replies(`{"decision":"deny","reason":"no"}`))
   const allowed = ask({ effect: "allow" })
@@ -313,8 +349,9 @@ test("tells a blocked agent to ask and retry instead of substituting an action",
   expect(reason).toBe("pushes to origin")
   expect(notes).toHaveLength(1)
   expect(notes[0]).toContain("do not substitute an equivalent action")
-  expect(notes[0]).toContain("retry the identical action")
-  expect(notes[0]).toContain("Only the user's own reply can authorize it")
+  expect(notes[0]).toContain("ask the user to approve the exact operation and scope")
+  expect(notes[0]).toContain("approval cannot resolve the block")
+  expect(notes[0]).toContain("Only a root-user turn or host-recorded answer can grant authority")
   // The records stay quotable as the model's own verdict.
   expect(harness.stored.last).toMatchObject({ decision: "deny", reason: "pushes to origin" })
   expect(harness.emitted[1]?.data).toMatchObject({ reason: "pushes to origin" })
@@ -571,7 +608,7 @@ test("agent-authored retry text cannot bypass a cached denial", async () => {
   await harness.evaluate(retry)
   expect(first.effect).toBe("deny")
   expect(retry.effect).toBe("deny")
-  expect(retry.message).toContain("Only the user's own reply can authorize it")
+  expect(retry.message).toContain("Only a root-user turn or host-recorded answer can grant authority")
   expect(harness.generated).toBe(1)
 })
 
