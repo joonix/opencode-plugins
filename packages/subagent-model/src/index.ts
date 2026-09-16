@@ -16,14 +16,14 @@ type Struct = {
 function optionalString(required: Field, optional: Field, description: string): Field {
   // Reuse the host's AST objects so optional-key metadata survives across Effect runtime copies.
   const context = Object.getOwnPropertyDescriptor(optional.ast, "context")
-  if (!context) throw new Error("opencode-subagent-model: incompatible optional field schema")
+  if (!context) throw new Error("joonix.subagent-model: incompatible optional field schema")
   const ast = Object.create(Object.getPrototypeOf(required.ast), Object.getOwnPropertyDescriptors(required.ast))
   Object.defineProperty(ast, "context", context)
   return required.rebuild(ast).annotate({ description })
 }
 
 export default Plugin.define({
-  id: "opencode-subagent-model",
+  id: "joonix.subagent-model",
   async setup(ctx) {
     const pending: Pending[] = []
     const calls = new Map<string, { readonly pending: Pending; applied: boolean; readonly prompt: string }>()
@@ -31,12 +31,12 @@ export default Plugin.define({
 
     await ctx.tool.transform((editor) => {
       const original = editor.get("subagent")
-      if (!original) throw new Error("opencode-subagent-model: built-in subagent tool not found")
+      if (!original) throw new Error("joonix.subagent-model: built-in subagent tool not found")
       editor.update("subagent", (tool) => {
         const input = tool.input as unknown as Struct
         const prompt = input.fields.prompt
         const sessionID = input.fields.sessionID
-        if (!prompt || !sessionID) throw new Error("opencode-subagent-model: incompatible subagent input schema")
+        if (!prompt || !sessionID) throw new Error("joonix.subagent-model: incompatible subagent input schema")
         tool.input = input.mapFields((fields) => ({
           ...fields,
           model: optionalString(prompt, sessionID, "Optional provider/model-id selection for this child session"),
@@ -68,7 +68,7 @@ export default Plugin.define({
       if (resumedSessionID) {
         const owner = resumedCalls.get(resumedSessionID)
         if (owner && owner !== event.id) {
-          throw new Error(`opencode-subagent-model: session ${resumedSessionID} already has a resume in progress`)
+          throw new Error(`joonix.subagent-model: session ${resumedSessionID} already has a resume in progress`)
         }
         resumedCalls.set(resumedSessionID, event.id)
       }
@@ -112,7 +112,7 @@ export default Plugin.define({
       if (index >= 0) pending.splice(index, 1)
       input.prompt = call.prompt
       if (!call.applied && event.status === "completed") {
-        throw new Error("opencode-subagent-model: override was not applied before the subagent completed")
+        throw new Error("joonix.subagent-model: override was not applied before the subagent completed")
       }
     })
   },

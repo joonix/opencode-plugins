@@ -74,7 +74,11 @@ Install the plugin from npm:
 opencode plugin add @joonix/opencode-reviewer
 ```
 
-The CLI adds it to your global OpenCode configuration. To set reviewer options, replace that entry with the object form in `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.jsonc`):
+The CLI adds it to your global OpenCode configuration. The plugin registers two ids: `joonix.reviewer` on the server
+and `joonix.reviewer.tui` in the terminal. Use them in `plugins` disable selectors, such as `-joonix.reviewer.tui` to
+keep the reviewer without its status line, or `-joonix.*` to disable every Joonix plugin.
+
+To set reviewer options, replace that entry with the object form in `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.jsonc`):
 
 ```jsonc
 {
@@ -115,7 +119,7 @@ following start. `make test-load` handles that for you.
 | `auditPath` | `$XDG_DATA_HOME/opencode/opencode-reviewer-audit.jsonl`, else `~/.local/share/...` | Audit file |
 
 Invalid option values fail the plugin load with an explicit error rather than falling back to a
-default. The host logs it as `failed to load plugin plugin.id=opencode-reviewer`.
+default. The host logs it as `failed to load plugin plugin.id=joonix.reviewer`.
 
 The default model requires the `openai` provider to be authenticated and offering
 `gpt-5.6-terra-fast`. Set `model` to any authenticated `provider/model` instead. A model that is
@@ -137,7 +141,7 @@ and `brake` went through `escalationMode`.
 
 ## Status line
 
-The terminal half (`src/tui.tsx`, plugin id `opencode-reviewer-tui`) temporarily appends
+The terminal half (`src/tui.tsx`, plugin id `joonix.reviewer.tui`) temporarily appends
 `reviewer: reviewing <action>` to the `prompt.footer.status` slot while a model review is running.
 It removes the status as soon as the verdict arrives, so a previous decision cannot look like it
 belongs to the next tool call. Concurrent reviews are tracked independently, including reviews

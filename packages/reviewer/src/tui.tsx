@@ -18,7 +18,7 @@ interface ReviewStart {
 function toReviewStart(data: Readonly<Record<string, unknown>>): ReviewStart | undefined {
   const { reviewID, sessionID, action } = data
   if (typeof reviewID !== "string" || typeof sessionID !== "string" || typeof action !== "string") {
-    console.error("opencode-reviewer-tui: unexpected reviewing event payload")
+    console.error("joonix.reviewer.tui: unexpected reviewing event payload")
     return undefined
   }
   return { reviewID, sessionID, action }
@@ -29,7 +29,7 @@ export function label(progress: Progress): string {
 }
 
 export default Plugin.define({
-  id: "opencode-reviewer-tui",
+  id: "joonix.reviewer.tui",
   setup(context) {
     const [active, setActive] = createSignal<Readonly<Record<string, Progress>>>({})
     const current = (sessionID: string | undefined) =>
@@ -45,7 +45,7 @@ export default Plugin.define({
     const stopReviewed = rpc.events.on("reviewed", (event) => {
       const reviewID = event.data.reviewID
       if (typeof reviewID !== "string") {
-        console.error("opencode-reviewer-tui: unexpected reviewed event payload")
+        console.error("joonix.reviewer.tui: unexpected reviewed event payload")
         return
       }
       setActive((entries) => {

@@ -28,8 +28,8 @@ grep -q "loading plugin\" id=$PLUGIN_DIR " "$LOG" || {
   echo "load check failed: the host never loaded $PLUGIN_DIR"
   exit 1
 }
-if grep -qE "failed to load plugin\" (plugin.id=opencode-reviewer|target=$PLUGIN_DIR)" "$LOG"; then
-  grep -E "failed to load plugin\" (plugin.id=opencode-reviewer|target=$PLUGIN_DIR)" "$LOG" | tail -1
+if grep -qE "failed to load plugin\" (plugin.id=joonix\.reviewer|target=$PLUGIN_DIR)" "$LOG"; then
+  grep -E "failed to load plugin\" (plugin.id=joonix\.reviewer|target=$PLUGIN_DIR)" "$LOG" | tail -1
   exit 1
 fi
 echo "load check ok: $PLUGIN_DIR loaded by opencode $("$OPENCODE" --version)"

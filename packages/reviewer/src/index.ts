@@ -113,7 +113,7 @@ const DENIAL_GUIDANCE = `Reviewer note: do not substitute an equivalent action t
 class TimeoutError extends Error {}
 
 function fail(message: string): never {
-  throw new Error(`opencode-reviewer: ${message}`)
+  throw new Error(`joonix.reviewer: ${message}`)
 }
 
 function describe(error: unknown): string {
@@ -124,7 +124,7 @@ async function guard(what: string, work: () => Promise<unknown>): Promise<void> 
   try {
     await work()
   } catch (error) {
-    console.error(`opencode-reviewer: ${what} failed: ${describe(error)}`)
+    console.error(`joonix.reviewer: ${what} failed: ${describe(error)}`)
   }
 }
 
@@ -445,7 +445,7 @@ async function appendAudit(path: string, entry: object): Promise<void> {
 }
 
 export default Plugin.define({
-  id: "opencode-reviewer",
+  id: "joonix.reviewer",
   async setup(ctx) {
     const options = parseOptions(ctx.options)
     const cache = new Map<string, CacheEntry>()

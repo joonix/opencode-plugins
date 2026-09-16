@@ -3,7 +3,7 @@ import { Rpc } from "@opencode/plugin/rpc"
 // Decisions reach the TUI only through this event: an auto-allowed request
 // never produces a permission request, so permission.asked is not emitted.
 export const Reviewer = Rpc.define({
-  id: "opencode-reviewer",
+  id: "joonix.reviewer",
   methods: {},
   events: {
     reviewing: {

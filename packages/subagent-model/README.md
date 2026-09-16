@@ -27,7 +27,8 @@ opencode plugin add @joonix/opencode-subagent-model
 ```
 
 The CLI adds the plugin to your global OpenCode configuration. Append `@<version>` to pin a release. The plugin takes
-no options.
+no options. Its plugin id is `joonix.subagent-model`, which is what a `plugins` disable selector such as
+`-joonix.subagent-model` or `-joonix.*` matches.
 
 Plugin list changes can take effect one service generation later: after editing the config, restart the background
 service (`opencode service restart`) and expect the new set on the following start.
