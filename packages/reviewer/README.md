@@ -28,9 +28,9 @@ Requires OpenCode V2 (verified against 2.0.4) and Bun.
 - Treats a completed `question` tool's host-recorded answer as direct user evidence: the exact
   question, selected answer, and matching option description are included, and a new answer
   invalidates cached verdicts. Assistant claims and ordinary tool-result prose remain untrusted.
-- Parses a single JSON object `{"decision":"allow"|"deny"|"ask","reason":"..."}` from the reply.
-  Prose around it is fine, but every object in the reply that reads as a decision has to agree:
-  quoted tool output carrying its own verdict makes the reply unparseable instead of decisive.
+- Parses exactly one JSON object `{"decision":"allow"|"deny"|"ask","reason":"..."}` from the
+  reply, optionally enclosed in one JSON code fence. Prose, extra fields, repeated objects, and an
+  empty reason make the reply unparseable instead of decisive.
 - Keeps up to 200 recent model approvals in memory for one hour, showing the latest eight from
   the same root session as bounded JSON evidence. Resources, originating agent/session, and
   model-written reasons are context, never authorization or proof of execution. The history is
@@ -141,6 +141,11 @@ One JSON object per line:
 ```json
 {"timestamp":"2026-09-14T10:51:23.523Z","sessionID":"ses_...","agent":"build","action":"shell","resources":["git status"],"decision":"allow","reason":"read-only inspection","source":"reviewer","durationMs":1421,"model":"openai/gpt-5.6-terra-fast"}
 ```
+
+On POSIX systems the file is restricted to its owner (`0600`). Node's mode bits do not establish
+Windows ACLs, so use an owner-only audit directory there or disable auditing. Audit records contain
+raw permission resources, which can include command arguments, paths, URLs, and other sensitive
+text; protect and retain them accordingly.
 
 `source` says who decided: `reviewer` (the model allowed or denied), `uncertain` (the model
 answered `ask`), `cached` (a repeat of a request decided in the last 60 minutes), `brake`

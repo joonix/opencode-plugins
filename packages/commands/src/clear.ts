@@ -62,7 +62,7 @@ export async function clearSession(context: ClearContext, sessionID: string): Pr
   // that store holds only the newest page, so its first entry is not the
   // session's first message and would leave everything older behind.
   const first = (await context.client.message.list({ sessionID, limit: 1, order: "asc" })).data[0]
-  if (!first) return false
+  if (!first) return session.revert !== undefined
 
   // files: false keeps the working tree out of it. Without it the host restores
   // file snapshots and clearing the transcript would revert the agent's edits.

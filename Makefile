@@ -1,4 +1,5 @@
 BUN ?= bun
+OPENCODE ?= $(HOME)/.bun/bin/opencode2
 
 PACKAGES := $(patsubst packages/%/Makefile,%,$(wildcard packages/*/Makefile))
 
@@ -16,7 +17,7 @@ test:
 test-load: $(PACKAGES:%=test-load-%)
 
 test-load-%:
-	$(MAKE) -C packages/$* test-load
+	$(MAKE) -C packages/$* test-load OPENCODE="$(OPENCODE)"
 
 # The registry rejects a version it already has, so a release that only bumps
 # one package publishes that one alone: make publish-reviewer. Publishing every
@@ -24,5 +25,5 @@ test-load-%:
 # prompts for an npm one-time password.
 publish: $(PACKAGES:%=publish-%)
 
-publish-%: test
+publish-%: test test-load-%
 	$(MAKE) -C packages/$* publish

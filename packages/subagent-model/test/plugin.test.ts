@@ -9,11 +9,21 @@ interface Harness {
   readonly switches: { sessionID: string; model: { providerID: string; id: string; variant?: string } }[]
   agentGets: number
   childAgent: string
+  run(input: Record<string, unknown>, id: string): Promise<unknown>
+  waitForExecution(): Promise<void>
+  releaseExecution(): void
+  releaseWait(): Promise<void>
 }
 
-async function start(options: { switchFailure?: Error } = {}): Promise<Harness> {
+async function start(options: { switchFailure?: Error; pauseExecution?: boolean } = {}): Promise<Harness> {
   const hooks: Harness["hooks"] = {}
   const switches: Harness["switches"] = []
+  let releaseExecution = () => {}
+  let releaseWait = () => {}
+  let markExecutionStarted = () => {}
+  const executionStarted = new Promise<void>((resolve) => { markExecutionStarted = resolve })
+  const executionGate = new Promise<void>((resolve) => { releaseExecution = resolve })
+  const waitGate = new Promise<void>((resolve) => { releaseWait = resolve })
   const inputSchema = Schema.Struct({
     agent: Schema.String,
     description: Schema.String,
@@ -25,8 +35,31 @@ async function start(options: { switchFailure?: Error } = {}): Promise<Harness> 
     id: "subagent",
     description: "Spawn a child",
     input: inputSchema,
+    execute: async (input: Record<string, unknown>, _context?: unknown) => {
+      markExecutionStarted()
+      if (options.pauseExecution) await executionGate
+      await hooks["session.prompt"]?.({
+        sessionID: typeof input.sessionID === "string" ? input.sessionID : "child",
+        prompt: { text: String(input.prompt) },
+      })
+      return { content: [], metadata: { status: input.background === true ? "running" : "completed" } }
+    },
   }
-  const harness: Harness = { fields: tool.input.fields, hooks, switches, agentGets: 0, childAgent: "explore" }
+  const harness: Harness = {
+    fields: tool.input.fields,
+    hooks,
+    switches,
+    agentGets: 0,
+    childAgent: "explore",
+    run: (input, id) => tool.execute(input, { id, sessionID: "parent", agent: "explore", messageID: "msg_1", progress: async () => {} }),
+    waitForExecution: () => executionStarted,
+    releaseExecution: () => releaseExecution(),
+    async releaseWait() {
+      releaseWait()
+      await Promise.resolve()
+      await Promise.resolve()
+    },
+  }
   const ctx = {
     tool: {
       transform: async (callback: (editor: any) => void) => {
@@ -70,6 +103,7 @@ async function start(options: { switchFailure?: Error } = {}): Promise<Harness> 
         hooks[`session.${name}`] = callback
         return { dispose: async () => {} }
       },
+      wait: async () => waitGate,
     },
   }
   await plugin.setup(ctx as unknown as Plugin.Context)
@@ -150,31 +184,86 @@ test("resume without overrides leaves normal behavior untouched", async () => {
   const harness = await start()
   const input = { agent: "explore", description: "continue", prompt: "continue", sessionID: "child" }
   await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-default", sessionID: "parent", input })
+  await harness.run(input, "call-default")
+  expect(input.prompt).toBe("continue")
   expect(harness.agentGets).toBe(0)
   expect(harness.switches).toEqual([])
 })
 
 test("rejects overlapping resumes of the same child and releases the guard after completion", async () => {
-  const harness = await start()
+  const harness = await start({ pauseExecution: true })
   const first = { agent: "explore", description: "first", prompt: "first", sessionID: "child", variant: "high" }
   const second = { agent: "explore", description: "second", prompt: "second", sessionID: "child", model: "anthropic/fast" }
   await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-a", sessionID: "parent", input: first })
-  expect(harness.hooks["execute.before"]!({ tool: "subagent", id: "call-b", sessionID: "parent", input: second }))
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-b", sessionID: "parent", input: second })
+  const running = harness.run(first, "call-a")
+  await harness.waitForExecution()
+  await expect(harness.run(second, "call-b"))
     .rejects.toThrow("already has a resume in progress")
-  await harness.hooks["session.prompt"]!({ sessionID: "child", prompt: { text: first.prompt } })
-  await harness.hooks["execute.after"]!({ tool: "subagent", id: "call-a", input: first, status: "completed", result: {} })
-  await expect(harness.hooks["execute.before"]!({ tool: "subagent", id: "call-b", sessionID: "parent", input: second }))
-    .resolves.toBeUndefined()
+  harness.releaseExecution()
+  await running
+  await harness.run(second, "call-b")
+})
+
+test("does not lock a resume until its prompt reaches admission", async () => {
+  const harness = await start()
+  const rejectedBeforeExecution = { agent: "explore", description: "rejected", prompt: "rejected", sessionID: "child" }
+  const retry = { agent: "explore", description: "retry", prompt: "retry", sessionID: "child" }
+
+  // A later execute.before hook can still reject the first call here. Since the
+  // transformed executor never starts, this plugin must not own the lock.
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-rejected", sessionID: "parent", input: rejectedBeforeExecution })
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-retry", sessionID: "parent", input: retry })
+  await harness.run(retry, "call-retry")
+})
+
+test("guards mixed plain and overridden resumes of the same child", async () => {
+  const harness = await start({ pauseExecution: true })
+  const plain = { agent: "explore", description: "plain", prompt: "plain", sessionID: "child" }
+  const overridden = { agent: "explore", description: "override", prompt: "override", sessionID: "child", variant: "high" }
+
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-plain", sessionID: "parent", input: plain })
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-override", sessionID: "parent", input: overridden })
+  const running = harness.run(plain, "call-plain")
+  await harness.waitForExecution()
+  await expect(harness.run(overridden, "call-override"))
+    .rejects.toThrow("already has a resume in progress")
+  harness.releaseExecution()
+  await running
+})
+
+test("keeps a background resume locked until the child becomes idle", async () => {
+  const harness = await start()
+  const background = { agent: "explore", description: "background", prompt: "background", sessionID: "child", background: true }
+  const competing = { agent: "explore", description: "competing", prompt: "competing", sessionID: "child", variant: "high" }
+
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-background", sessionID: "parent", input: background })
+  await harness.run(background, "call-background")
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-competing", sessionID: "parent", input: competing })
+  await expect(harness.run(competing, "call-competing"))
+    .rejects.toThrow("already has a resume in progress")
+
+  await harness.releaseWait()
+  await harness.run(competing, "call-competing")
 })
 
 test("cleans up after switchModel failure", async () => {
   const harness = await start({ switchFailure: new Error("switch failed") })
   const input = { agent: "explore", description: "continue", prompt: "continue", sessionID: "child", variant: "high" }
   await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-fail", sessionID: "parent", input })
-  await expect(harness.hooks["session.prompt"]!({ sessionID: "child", prompt: { text: input.prompt } }))
+  await expect(harness.run(input, "call-fail"))
     .rejects.toThrow("switch failed")
-  await harness.hooks["execute.after"]!({ tool: "subagent", id: "call-fail", input, status: "error", error: {} })
-  const retry = { agent: "explore", description: "retry", prompt: "retry", sessionID: "child", model: "anthropic/fast" }
+  const retry = { agent: "explore", description: "retry", prompt: "retry", sessionID: "child" }
+  await harness.run(retry, "call-retry")
+})
+
+test("releases the resume guard when override resolution fails", async () => {
+  const harness = await start()
+  const invalid = { agent: "explore", description: "invalid", prompt: "invalid", sessionID: "child", model: "missing/model" }
+  await expect(harness.hooks["execute.before"]!({ tool: "subagent", id: "call-invalid", sessionID: "parent", input: invalid }))
+    .rejects.toThrow("Unknown model")
+
+  const retry = { agent: "explore", description: "retry", prompt: "retry", sessionID: "child", variant: "high" }
   await expect(harness.hooks["execute.before"]!({ tool: "subagent", id: "call-retry", sessionID: "parent", input: retry }))
     .resolves.toBeUndefined()
 })

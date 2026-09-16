@@ -57,5 +57,6 @@ make test-load
 ```
 
 `make test-load` needs an installed `opencode2` executable and uses disposable configuration and data
-directories. Maintainers publish with `make publish`, which runs the suite first; bump each package
-`version` beforehand, since a version already on the registry fails the publish.
+directories. Maintainers publish with `make publish`, which runs the suite and each package's load
+check first; bump each package `version` beforehand, since a version already on the registry fails
+the publish.

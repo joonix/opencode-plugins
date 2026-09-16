@@ -38,6 +38,7 @@ export default Plugin.define({
       const original = editor.get("subagent")
       if (!original) throw new Error("joonix.subagent-model: built-in subagent tool not found")
       editor.update("subagent", (tool) => {
+        const execute = tool.execute
         const input = tool.input as unknown as Struct
         const prompt = input.fields.prompt
         const sessionID = input.fields.sessionID
@@ -48,6 +49,37 @@ export default Plugin.define({
           variant: optionalString(prompt, sessionID, "Optional reasoning variant (effort) for this child session"),
         })) as typeof tool.input
         tool.description += " Optional model and variant inputs select the child session's model and effort. Resumes without overrides keep the child's current selection."
+        tool.execute = async (raw, context) => {
+          const values = raw as Record<string, unknown>
+          const resumedSessionID = typeof values.sessionID === "string" ? values.sessionID : undefined
+          if (!resumedSessionID) return execute(raw, context)
+          const owner = resumedCalls.get(resumedSessionID)
+          if (owner && owner !== context.id) {
+            throw new Error(`joonix.subagent-model: session ${resumedSessionID} already has a resume in progress`)
+          }
+          resumedCalls.set(resumedSessionID, context.id)
+          try {
+            const result = await execute(raw, context)
+            const status = (result.metadata as { readonly status?: unknown } | undefined)?.status
+            if (status === "running") {
+              void ctx.session.wait({ sessionID: resumedSessionID }).then(
+                () => {
+                  if (resumedCalls.get(resumedSessionID) === context.id) resumedCalls.delete(resumedSessionID)
+                },
+                (error) => {
+                  console.error(`joonix.subagent-model: waiting for session ${resumedSessionID} to become idle failed`, error)
+                  if (resumedCalls.get(resumedSessionID) === context.id) resumedCalls.delete(resumedSessionID)
+                },
+              )
+            } else if (resumedCalls.get(resumedSessionID) === context.id) {
+              resumedCalls.delete(resumedSessionID)
+            }
+            return result
+          } catch (error) {
+            if (resumedCalls.get(resumedSessionID) === context.id) resumedCalls.delete(resumedSessionID)
+            throw error
+          }
+        }
       })
     })
 
@@ -70,13 +102,6 @@ export default Plugin.define({
       const base = agent?.data.model ?? session.model
       if (!base) throw new Error("Cannot determine the subagent's default model")
       const model = resolveOverride(override, base, catalog.data as readonly ModelInfo[])!
-      if (resumedSessionID) {
-        const owner = resumedCalls.get(resumedSessionID)
-        if (owner && owner !== event.id) {
-          throw new Error(`joonix.subagent-model: session ${resumedSessionID} already has a resume in progress`)
-        }
-        resumedCalls.set(resumedSessionID, event.id)
-      }
 
       const suffix = marker(event.id)
       const prompt = String(input.prompt)
@@ -113,8 +138,6 @@ export default Plugin.define({
     await ctx.tool.hook("execute.after", async (event) => {
       if (event.tool !== "subagent") return
       const input = event.input as Record<string, unknown>
-      const resumedSessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
-      if (resumedSessionID && resumedCalls.get(resumedSessionID) === event.id) resumedCalls.delete(resumedSessionID)
       const call = calls.get(event.id)
       if (!call) return
       calls.delete(event.id)

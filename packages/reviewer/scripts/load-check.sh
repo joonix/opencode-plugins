@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-OPENCODE="${OPENCODE:-$HOME/.bun/bin/opencode}"
+OPENCODE="${OPENCODE:-$HOME/.bun/bin/opencode2}"
 ROOT="$(mktemp -d)"
 
 export XDG_CONFIG_HOME="$ROOT/config"

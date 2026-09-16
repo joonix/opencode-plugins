@@ -149,6 +149,18 @@ test("flushes an already staged revert before choosing its boundary", async () =
   expect(remaining()).toEqual([])
 })
 
+test("reports success when committing a pre-existing revert empties the session", async () => {
+  const { context, names, remaining } = harness({
+    messageIDs: ["msg_first", "msg_second"],
+    staged: { messageID: "msg_first" },
+  })
+
+  expect(await clearSession(context, "ses_1")).toBe(true)
+  expect(names().filter((name) => name === "revert.commit")).toHaveLength(1)
+  expect(names()).not.toContain("revert.stage")
+  expect(remaining()).toEqual([])
+})
+
 test("does not commit a pre-existing revert when none is staged", async () => {
   const { context, names } = harness()
 
