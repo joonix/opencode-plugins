@@ -90,18 +90,44 @@ test("extends the tool and applies a new-child override before prompt admission"
   const input = { agent: "explore", description: "check", prompt: "inspect", model: "anthropic/fast", variant: "high" }
   await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-1", sessionID: "parent", input })
   expect(input.prompt).toContain("opencode-subagent-model")
+  expect(input.description).toBe("check [anthropic/fast high]")
   const prompt = { sessionID: "child", prompt: { text: `prefix\n${input.prompt}` } }
   await harness.hooks["session.prompt"]!(prompt)
   expect(prompt.prompt.text).toBe("prefix\ninspect")
   expect(harness.switches).toEqual([{ sessionID: "child", model: { providerID: "anthropic", id: "fast", variant: "high" } }])
   await harness.hooks["execute.after"]!({ tool: "subagent", id: "call-1", input, status: "completed", result: {} })
   expect(input.prompt).toBe("inspect")
+  expect(input.description).toBe("check")
+})
+
+test("labels new children with the resolved model selection", async () => {
+  const harness = await start()
+  const modelOnly = { agent: "explore", description: "model", prompt: "inspect", model: "anthropic/fast" }
+  const variantOnly = { agent: "explore", description: "variant", prompt: "inspect", variant: "high" }
+
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-model", sessionID: "parent", input: modelOnly })
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-variant", sessionID: "parent", input: variantOnly })
+
+  expect(modelOnly.description).toBe("model [anthropic/fast]")
+  expect(variantOnly.description).toBe("variant [openai/default high]")
+})
+
+test("restores a new child's description after a failed execution", async () => {
+  const harness = await start()
+  const input = { agent: "explore", description: "check", prompt: "inspect", model: "anthropic/fast" }
+
+  await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-error", sessionID: "parent", input })
+  expect(input.description).toBe("check [anthropic/fast]")
+  await harness.hooks["execute.after"]!({ tool: "subagent", id: "call-error", input, status: "error", error: {} })
+
+  expect(input.description).toBe("check")
 })
 
 test("resume uses the child's current model and does not fetch the agent", async () => {
   const harness = await start()
   const input = { agent: "explore", description: "continue", prompt: "continue", sessionID: "child", variant: "high" }
   await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-2", sessionID: "parent", input })
+  expect(input.description).toBe("continue")
   await harness.hooks["session.prompt"]!({ sessionID: "child", prompt: { text: `prefix\n${input.prompt}` } })
   expect(harness.agentGets).toBe(0)
   expect(harness.switches[0]?.model).toEqual({ providerID: "openai", id: "default", variant: "high" })
@@ -158,7 +184,10 @@ for (const background of [false, true]) {
     const harness = await start()
     const input = { agent: "explore", description: "check", prompt: "inspect", model: "anthropic/fast", background }
     await harness.hooks["execute.before"]!({ tool: "subagent", id: "call-3", sessionID: "parent", input })
+    const labeledDescription = input.description
     expect(harness.hooks["execute.after"]!({ tool: "subagent", id: "call-3", input, status: "completed", result: {} }))
       .rejects.toThrow("override was not applied")
+    expect(labeledDescription).toBe("check [anthropic/fast]")
+    expect(input.description).toBe("check")
   })
 }

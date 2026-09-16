@@ -26,7 +26,12 @@ export default Plugin.define({
   id: "joonix.subagent-model",
   async setup(ctx) {
     const pending: Pending[] = []
-    const calls = new Map<string, { readonly pending: Pending; applied: boolean; readonly prompt: string }>()
+    const calls = new Map<string, {
+      readonly pending: Pending
+      applied: boolean
+      readonly prompt: string
+      readonly description?: string
+    }>()
     const resumedCalls = new Map<string, string>()
 
     await ctx.tool.transform((editor) => {
@@ -75,7 +80,12 @@ export default Plugin.define({
 
       const suffix = marker(event.id)
       const prompt = String(input.prompt)
+      const description = typeof input.description === "string" ? input.description : undefined
       input.prompt = prompt + suffix
+      if (!resumedSessionID && description !== undefined) {
+        const selection = `${model.providerID}/${model.id}${model.variant ? ` ${model.variant}` : ""}`
+        input.description = `${description} [${selection}]`
+      }
       const entry: Pending = {
         parentID: event.sessionID,
         agent: agentID,
@@ -85,7 +95,7 @@ export default Plugin.define({
         createdAt: Date.now(),
       }
       pending.push(entry)
-      calls.set(event.id, { pending: entry, applied: false, prompt })
+      calls.set(event.id, { pending: entry, applied: false, prompt, description })
     })
 
     await ctx.session.hook("prompt", async (event) => {
@@ -111,6 +121,7 @@ export default Plugin.define({
       const index = pending.indexOf(call.pending)
       if (index >= 0) pending.splice(index, 1)
       input.prompt = call.prompt
+      if (call.description !== undefined) input.description = call.description
       if (!call.applied && event.status === "completed") {
         throw new Error("joonix.subagent-model: override was not applied before the subagent completed")
       }

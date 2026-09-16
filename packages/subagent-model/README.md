@@ -11,6 +11,7 @@ Requires OpenCode V2 (verified against 2.0.4) and Bun.
   description, so the parent model knows it can choose a child's model and reasoning effort.
 - Resolves the selection against the active model catalog before the child starts. New children use the selected
   values and fall back to their agent's or parent's defaults for omitted values.
+- Adds the resolved model and optional variant to a new child session's title when an override is selected.
 - A resumed child keeps its current model and variant when neither override is provided. Supplying only a model uses
   that model's default variant; supplying only a variant keeps the child's current model.
 - Rejects overlapping resumes of the same child session, so competing calls cannot race to change its model.
