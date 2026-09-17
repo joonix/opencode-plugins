@@ -8,7 +8,7 @@ PACKAGES := $(patsubst packages/%/Makefile,%,$(wildcard packages/*/Makefile))
 # The per-package targets are deliberately not .PHONY: make skips the implicit
 # rule search for phony targets, which would leave the pattern rules unmatched.
 # No file is ever named after them, so they always run.
-.PHONY: install test test-load check-publish publish
+.PHONY: install test test-load check-publish-auth check-publish publish
 
 install:
 	$(BUN) install
@@ -21,6 +21,17 @@ test-load: $(PACKAGES:%=test-load-%)
 test-load-%:
 	$(MAKE) -C packages/$* test-load OPENCODE="$(OPENCODE)"
 
+check-publish-auth:
+	@if ! $(NPM) whoami >/dev/null 2>&1; then \
+		echo "npm authentication is missing or expired; starting login..."; \
+		$(NPM) login || exit $$?; \
+	fi
+	@identity="$$( $(NPM) whoami 2>/dev/null )" || { \
+		echo "Cannot publish: npm authentication still failed after login." >&2; \
+		exit 1; \
+	}; \
+	echo "npm authenticated as $$identity"
+
 # The registry rejects a version it already has, so a release that only bumps
 # one package publishes that one alone: make publish-reviewer. Publishing every
 # package remains available for a release that bumps all of them. Check every
@@ -31,7 +42,7 @@ check-publish:
 		if [ $$status -ne 0 ] && [ $$status -ne 3 ]; then exit $$status; fi; \
 	done
 
-publish: test test-load
+publish: check-publish-auth test test-load
 	@candidates=""; \
 	for package in $(PACKAGES); do \
 		$(NODE) scripts/check-publish-version.mjs packages/$$package "$(NPM)" --aggregate; status=$$?; \
@@ -46,5 +57,5 @@ publish: test test-load
 check-publish-%:
 	$(NODE) scripts/check-publish-version.mjs packages/$* "$(NPM)"
 
-publish-%: check-publish-% test test-load-%
+publish-%: check-publish-auth check-publish-% test test-load-%
 	$(MAKE) -C packages/$* publish
