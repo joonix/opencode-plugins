@@ -6,9 +6,9 @@ import { test } from "node:test"
 
 import { releaseMetadata } from "./release-metadata.mjs"
 
-function fixture(name = "@joonix/opencode-example", version = "1.2.3") {
+function fixture(name = "@joonix/opencode-example", version = "1.2.3", slug = "example") {
   const root = mkdtempSync(join(tmpdir(), "release-metadata-"))
-  const directory = join(root, "packages", "example")
+  const directory = join(root, "packages", slug)
   mkdirSync(directory, { recursive: true })
   writeFileSync(join(directory, "package.json"), JSON.stringify({ name, version }))
   return root
@@ -24,16 +24,9 @@ test("returns package metadata when the tag and manifest agree", () => {
   })
 })
 
-test("accepts package slugs and prerelease versions", () => {
-  const root = fixture("@joonix/opencode-example-plugin", "2.0.0-rc.1")
-  const destination = join(root, "packages", "example-plugin")
-  mkdirSync(destination, { recursive: true })
-  writeFileSync(join(destination, "package.json"), JSON.stringify({
-    name: "@joonix/opencode-example-plugin",
-    version: "2.0.0-rc.1",
-  }))
-
-  assert.equal(releaseMetadata("example-plugin-v2.0.0-rc.1", root).directory, "packages/example-plugin")
+test("accepts package slugs containing hyphens", () => {
+  const root = fixture("@joonix/opencode-example-plugin", "2.0.0", "example-plugin")
+  assert.equal(releaseMetadata("example-plugin-v2.0.0", root).directory, "packages/example-plugin")
 })
 
 test("rejects a tag whose version does not match the manifest", () => {
@@ -52,6 +45,7 @@ test("rejects an unexpected package name", () => {
 
 test("rejects unknown packages and malformed tags", () => {
   assert.throws(() => releaseMetadata("missing-v1.0.0", fixture()), /Cannot read packages\/missing\/package.json/)
-  assert.throws(() => releaseMetadata("example@1.2.3", fixture()), /expected <package>-v<semver>/)
-  assert.throws(() => releaseMetadata("../example-v1.2.3", fixture()), /expected <package>-v<semver>/)
+  assert.throws(() => releaseMetadata("example@1.2.3", fixture()), /expected <package>-v<major\.minor\.patch>/)
+  assert.throws(() => releaseMetadata("example-v1.2.3-rc.1", fixture()), /expected <package>-v<major\.minor\.patch>/)
+  assert.throws(() => releaseMetadata("../example-v1.2.3", fixture()), /expected <package>-v<major\.minor\.patch>/)
 })

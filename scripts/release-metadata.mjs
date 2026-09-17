@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const TAG_PATTERN = /^([a-z0-9]+(?:-[a-z0-9]+)*)-v(\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/
+const TAG_PATTERN = /^([a-z0-9]+(?:-[a-z0-9]+)*)-v(\d+\.\d+\.\d+)$/
 
 export function releaseMetadata(tag, root = resolve(dirname(fileURLToPath(import.meta.url)), "..")) {
   const match = TAG_PATTERN.exec(tag)
   if (!match) {
-    throw new Error(`Invalid release tag ${JSON.stringify(tag)}; expected <package>-v<semver>`)
+    throw new Error(`Invalid release tag ${JSON.stringify(tag)}; expected <package>-v<major.minor.patch>`)
   }
 
   const [, slug, version] = match
