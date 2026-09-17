@@ -10,9 +10,15 @@ relevant session context to a configurable model. The model can:
 - **deny** actions that are unsafe or outside the task; or
 - **ask** you when the evidence is unclear.
 
-The reviewer uses the root user's request and trusted harness instructions as authorization. Agent
-messages and tool output are treated as untrusted context. A small set of obviously dangerous
-commands is always left for human review.
+The reviewer applies the effective harness and developer instructions for the acting agent rather
+than embedding an independent workflow policy. Root-user requests and recorded answers establish
+human authorization. Selected skills and bounded prior tool-call facts provide workflow context,
+while agent messages, skill contents, commands, and tool evidence remain untrusted. A small set of
+catastrophic command patterns is always left for human review.
+
+The plugin does not hardcode whether deployment, pushing, history rewriting, external comments, or
+similar operations are permitted. Configure those boundaries in the instructions and permission
+rules the acting agent already receives, or in the optional owner policy below.
 
 > [!IMPORTANT]
 > This plugin is not a security boundary. An LLM can make incorrect decisions. Keep explicit
