@@ -1,6 +1,6 @@
 {
   "name": "@joonix/opencode-commands",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
   "description": "Overrides and adds OpenCode V2 slash commands, starting with an in-place /clear",
