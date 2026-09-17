@@ -33,6 +33,13 @@ export function releaseMetadata(tag, root = resolve(dirname(fileURLToPath(import
     throw new Error(`Tag ${tag} does not match ${manifest.name} version ${manifest.version}`)
   }
 
+  const expectedRepository = "git+https://github.com/joonix/opencode-plugins.git"
+  if (manifest.repository?.url !== expectedRepository || manifest.repository?.directory !== directory) {
+    throw new Error(
+      `${manifest.name} repository must be ${expectedRepository} with directory ${directory}`,
+    )
+  }
+
   return {
     slug,
     directory,

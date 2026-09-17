@@ -6,11 +6,24 @@ import { test } from "node:test"
 
 import { releaseMetadata } from "./release-metadata.mjs"
 
-function fixture(name = "@joonix/opencode-example", version = "1.2.3", slug = "example") {
+function fixture(
+  name = "@joonix/opencode-example",
+  version = "1.2.3",
+  slug = "example",
+  repositoryDirectory = `packages/${slug}`,
+) {
   const root = mkdtempSync(join(tmpdir(), "release-metadata-"))
   const directory = join(root, "packages", slug)
   mkdirSync(directory, { recursive: true })
-  writeFileSync(join(directory, "package.json"), JSON.stringify({ name, version }))
+  writeFileSync(join(directory, "package.json"), JSON.stringify({
+    name,
+    version,
+    repository: {
+      type: "git",
+      url: "git+https://github.com/joonix/opencode-plugins.git",
+      directory: repositoryDirectory,
+    },
+  }))
   return root
 }
 
@@ -40,6 +53,13 @@ test("rejects an unexpected package name", () => {
   assert.throws(
     () => releaseMetadata("example-v1.2.3", fixture("unrelated-package")),
     /selects @joonix\/opencode-example, but the manifest name is unrelated-package/,
+  )
+})
+
+test("rejects repository metadata that cannot establish package provenance", () => {
+  assert.throws(
+    () => releaseMetadata("example-v1.2.3", fixture(undefined, undefined, undefined, "packages/other")),
+    /repository must be .* with directory packages\/example/,
   )
 })
 
