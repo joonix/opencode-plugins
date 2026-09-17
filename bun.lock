@@ -11,7 +11,7 @@
     },
     "packages/commands": {
       "name": "@joonix/opencode-commands",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@opencode/plugin": "2.0.4",
       },

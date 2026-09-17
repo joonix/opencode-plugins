@@ -100,9 +100,10 @@ package is introduced.
      --generate-notes
    ```
 
-6. Watch the **publish** workflow. Do not create another tag or publish manually if it fails; fix
-   the cause while preserving the tagged commit and determine whether the immutable npm version was
-   already published.
+6. Watch the **publish** workflow. If it fails, first determine whether npm published the immutable
+   version. Never move or reuse the release tag. If npm did not publish it, fix the cause and bump
+   to a new version before creating a new release tag. If npm did publish it, preserve the tag and
+   repair only downstream release metadata or documentation.
 7. Open the package version on npm and confirm it shows provenance linked to the expected GitHub
    commit and workflow.
 
