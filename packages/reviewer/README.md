@@ -16,6 +16,15 @@ human authorization. Selected skills and bounded prior tool-call facts provide w
 while agent messages, skill contents, commands, and tool evidence remain untrusted. A small set of
 catastrophic command patterns is always left for human review.
 
+Prior actions are reduced to sanitized categories and host-recorded completion status; raw command
+arguments and tool output are not sent to the reviewer. Missing or oversized effective instructions
+leave the request for human review rather than evaluating against incomplete policy.
+
+Exact host re-evaluations reuse their verdict. A denial remains sticky for the same action until
+trusted instructions or human authorization changes, preventing probabilistic retry-until-allow.
+An uncertain `ask` verdict is cached for the unchanged action regardless of its tool-call ID or
+later agent activity. It is reconsidered when human authorization or effective instructions change.
+
 The plugin does not hardcode whether deployment, pushing, history rewriting, external comments, or
 similar operations are permitted. Configure those boundaries in the instructions and permission
 rules the acting agent already receives, or in the optional owner policy below.
