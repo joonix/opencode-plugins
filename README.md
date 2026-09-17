@@ -62,4 +62,5 @@ directories.
 Maintainers release packages by creating package-specific Git tags. GitHub Actions tests and packs
 the tagged source, then publishes through npm Trusted Publishing with provenance and no stored npm
 token. See [RELEASING.md](RELEASING.md) for the one-time npm and GitHub setup and the release steps.
-The local `make publish` targets remain available for exceptional manual recovery.
+The repository intentionally provides no local publish target; established packages are released
+only through the GitHub workflow.

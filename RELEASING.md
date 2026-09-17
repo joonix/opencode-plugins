@@ -37,9 +37,10 @@ does not block Trusted Publishing because it uses short-lived OIDC credentials r
 traditional tokens.
 
 A newly created npm package has no npm settings page yet. Publish its first version manually with
-`make publish-<package>`, then add its Trusted Publisher entry before releasing its next version by
-tag. Trusted Publisher setup is per package, not per npm scope. This bootstrap release is the only
-case that should require a traditional interactive npm login.
+`npm publish ./packages/<package> --access public`, then add its Trusted Publisher entry before
+releasing its next version by tag. Trusted Publisher setup is per package, not per npm scope. This
+bootstrap release is the only case that should require a traditional interactive npm login. The
+repository intentionally provides no Makefile target for publishing established packages.
 
 ### New package checklist
 
@@ -54,8 +55,9 @@ scope or another package.
   - `repository.directory` set to `packages/<package>`.
 - [ ] Add the package's tests and `Makefile`, including `test` and `test-load` targets.
 - [ ] Run `bun install --force`, `make test`, and `make test-load`, then merge the package to `main`.
-- [ ] Publish the initial version interactively with `make publish-<package>`. Do not create a
-      release tag for this already-published version.
+- [ ] Publish the initial version interactively with
+      `npm publish ./packages/<package> --access public`. Do not create a release tag for this
+      already-published version.
 - [ ] On that package's npm **Settings** page, add the GitHub Actions Trusted Publisher using the
       exact values in the table above, including direct `npm publish` permission.
 - [ ] Add `refs/tags/<package>-v*` to the GitHub release-tag ruleset.
@@ -63,8 +65,8 @@ scope or another package.
       provenance for the expected commit and workflow.
 - [ ] Set npm **Publishing access** to **Require two-factor authentication and disallow bypass 2FA
       tokens (recommended)**.
-- [ ] Revoke any bootstrap or automation token that is no longer needed. Interactive account login
-      remains available for emergency manual publishing and requires 2FA.
+- [ ] Revoke any bootstrap or automation token that is no longer needed. Publish all subsequent
+      versions through the GitHub workflow.
 
 ### Protect release tags
 
