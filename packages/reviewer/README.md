@@ -29,6 +29,10 @@ The plugin does not hardcode whether deployment, pushing, history rewriting, ext
 similar operations are permitted. Configure those boundaries in the instructions and permission
 rules the acting agent already receives, or in the optional owner policy below.
 
+Scope checks distinguish consequential departures from ordinary work. Bounded setup, inspection,
+synchronization, and reversible housekeeping that stay local to the active workspace and preserve
+existing work do not need to be enumerated merely because they are optional or happen afterward.
+
 > [!IMPORTANT]
 > This plugin is not a security boundary. An LLM can make incorrect decisions. Keep explicit
 > OpenCode `deny` rules for destructive, privileged, or externally visible actions.
