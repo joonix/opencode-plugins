@@ -1,51 +1,24 @@
 # opencode-reviewer
 
-An OpenCode V2 plugin that reviews every permission request that would otherwise stop and ask
-you. It hooks `permission.evaluate`, sends the pending action plus the session evidence to a
-small model, and turns the model's verdict into `allow`, `deny`, or a prompt for you.
+An OpenCode V2 plugin that gives permission requests a quick second opinion before they reach
+you.
 
-Requires OpenCode V2 (verified against 2.0.4) and Bun.
+When OpenCode would normally show an `ask` prompt, the reviewer sends the pending action and its
+relevant session context to a configurable model. The model can:
+
+- **allow** routine, safe work without interrupting you;
+- **deny** actions that are unsafe or outside the task; or
+- **ask** you when the evidence is unclear.
+
+The reviewer uses the root user's request and trusted harness instructions as authorization. Agent
+messages and tool output are treated as untrusted context. A small set of obviously dangerous
+commands is always left for human review.
 
 > [!IMPORTANT]
-> This plugin is not a security boundary. An LLM can make incorrect permission decisions. Keep
-> explicit OpenCode `deny` rules for destructive, privileged, or externally visible actions.
+> This plugin is not a security boundary. An LLM can make incorrect decisions. Keep explicit
+> OpenCode `deny` rules for destructive, privileged, or externally visible actions.
 
-## What it does
-
-- Runs only on requests whose rule-computed effect is `ask`. A configured `allow` or `deny` is
-  never touched, and OpenCode never invokes the hook for an explicit configured deny.
-- Checks an emergency-brake list first: `rm -r -f` aimed at `/` or home itself (not at a path
-  under home), `mkfs` as a command, `dd` writing to a device other than `/dev/null`, a forced
-  `git push` where main or master is a whole branch or refspec token, and the classic fork bomb.
-  Those stay `ask`: never sent to the model, never auto-allowed.
-- Otherwise builds a compact prompt: built-in reviewer instructions, the acting session's
-  effective harness instructions as trusted policy, an optional additional owner policy, then the
-  untrusted evidence (acting agent, action, resources, metadata, recent user requests,
-  host-recorded answers to the `question` tool, and the last few messages, each bounded).
-- Captures the same system instructions sent to the acting agent, including applicable
-  `AGENTS.md` files. Rules with an explicit-approval exception therefore use the root user's
-  scoped approval instead of being shadowed by a duplicated plugin policy.
-- Resolves the root session before reading the user request, so a sub-agent cannot pass its
-  parent's task prompt off as human authorization. The child's own task prompt appears in a
-  separate section marked agent-authored. When compaction has eaten the last user message, the
-  compaction summary stands in, labelled as such.
-- Treats a completed `question` tool's host-recorded answer as direct user evidence: the exact
-  question, selected answer, and matching option description are included, and a new answer
-  invalidates cached verdicts. Assistant claims and ordinary tool-result prose remain untrusted.
-- Parses exactly one JSON object `{"decision":"allow"|"deny"|"ask","reason":"..."}` from the
-  reply, optionally enclosed in one JSON code fence. Prose, extra fields, repeated objects, and an
-  empty reason make the reply unparseable instead of decisive.
-- Keeps up to 200 recent model approvals in memory for one hour, showing the latest eight from
-  the same root session as bounded JSON evidence. Resources, originating agent/session, and
-  model-written reasons are context, never authorization or proof of execution. The history is
-  lost on plugin reload; new requests still receive independent judgments.
-- Memoizes a real verdict for 60 minutes, keyed on the permission request's `source` and exact
-  action scope (session, agent, action, resources, metadata). The host re-evaluates every pending
-  request whenever you answer "always" somewhere, and the same request must not draw a second,
-  different verdict. Model `ask` verdicts are cached too; timeouts, errors, and parse failures are
-  retried. A request without a `source` is never cached.
-- Appends one JSON line per reviewed request to the audit file and keeps the last decision in
-  plugin storage under the key `last`.
+Requires OpenCode V2 (verified against 2.0.4) and Bun.
 
 ## Install
 
@@ -53,11 +26,9 @@ Requires OpenCode V2 (verified against 2.0.4) and Bun.
 opencode plugin add @joonix/opencode-reviewer
 ```
 
-The CLI adds it to your global OpenCode configuration. The plugin registers two ids: `joonix.reviewer` on the server
-and `joonix.reviewer.tui` in the terminal. Use them in disable selectors, such as `-joonix.reviewer.tui` to keep the
-reviewer without its status line, or `-joonix.*` to disable every Joonix plugin.
-
-For options, replace that entry with the object form in `opencode.jsonc` (global config lives in `~/.config/opencode/opencode.jsonc`):
+The package includes a terminal status-line plugin (`joonix.reviewer.tui`) and OpenCode loads it
+automatically alongside the server plugin (`joonix.reviewer`). You do not need a separate TUI
+entry. To configure the package, replace its entry in `~/.config/opencode/opencode.jsonc` with:
 
 ```jsonc
 {
@@ -68,123 +39,43 @@ For options, replace that entry with the object form in `opencode.jsonc` (global
       "options": {
         "model": "openai/gpt-5.6-terra-fast",
         "variant": "medium",
-        "timeoutMs": 120000,
-        "escalationMode": "deny",
-        "audit": true
+        "escalationMode": "ask"
       }
     }
   ]
 }
 ```
 
-Remove the V1 plugin (`opencode-permission-reviewer`) from the `plugin` array first. Running both
-means two reviewers on the same request.
-
-Plugin list changes can take effect one service generation later: after editing the config,
-restart the background service (`opencode service restart`) and expect the new set on the
-following start. `make test-load` handles that for you.
-
-## Update
+Remove the V1 plugin (`opencode-permission-reviewer`) before enabling this one. Restart the
+OpenCode service after changing the plugin list:
 
 ```sh
-opencode plugin check   # report package plugins that have a newer release
-opencode plugin update  # update package plugins to their latest release
+opencode service restart
 ```
-
-Pinned `@<version>` entries and directory entries are left alone, and your `options` block survives
-an update untouched. The running service picks up the new version on its own; restart it only if the
-change does not appear.
 
 ## Options
 
-| Option | Default | Meaning |
+| Option | Default | Description |
 | --- | --- | --- |
 | `model` | `openai/gpt-5.6-terra-fast` | Reviewer model as `provider/model` |
-| `variant` | unset | Optional catalog variant such as `medium` |
-| `timeoutMs` | `60000` | Deadline for the review call |
-| `policy` | `""` | Optional additional owner policy. Do not duplicate rules already present in harness instructions or `AGENTS.md`. |
-| `escalationMode` | `"ask"` | What to do on timeout, error, unparseable reply, or a model `ask` |
-| `audit` | `true` | Append one JSON line per reviewed request |
-| `auditPath` | `$XDG_DATA_HOME/opencode/opencode-reviewer-audit.jsonl`, else `~/.local/share/...` | Audit file |
+| `variant` | unset | Optional model variant |
+| `timeoutMs` | `60000` | Review deadline in milliseconds |
+| `policy` | `""` | Additional owner policy |
+| `escalationMode` | `"ask"` | Fallback for errors, timeouts, or an uncertain verdict: `ask` or `deny` |
+| `audit` | `true` | Write reviewed requests to an audit file |
+| `auditPath` | platform data directory | Audit JSONL path |
 
-Invalid option values fail the plugin load with an explicit error rather than falling back to a
-default. The host logs it as `failed to load plugin plugin.id=joonix.reviewer`.
-
-The default model requires the `openai` provider to be authenticated and offering
-`gpt-5.6-terra-fast`. Set `model` to any authenticated `provider/model` instead. A model that is
-unavailable at review time is not a silent failure: the review call errors and the request follows
-`escalationMode`, which by default leaves you the normal permission prompt.
-
-## Hook semantics
-
-The hook runs inside permission evaluation, before any permission request exists. While the
-reviewer is thinking, **no prompt is shown**: an `allow` means you never see the request at all,
-and a `deny` reaches the model as the block reason (the `reason` string).
-
-A block message also carries fixed guidance: do not substitute an equivalent action. It tells the
-agent to seek scoped approval only when authorization is missing, and to explain when an absolute
-trusted instruction or intrinsically unsafe action cannot be solved by approval. A model
-denial is cached, so the agent cannot argue its way past it, but your next turn invalidates the
-cache and the same action is judged again with your answer as evidence. Agents left to improvise
-around a block tend to spend that opportunity on a worse plan. The audit line, the plugin storage
-record, and the status-line event all keep the bare model reason.
-
-Timeout, a model error, an unparseable reply, or a model that answers `ask` all fall back to
-`escalationMode`: `ask` (default) leaves the normal permission prompt with the reason attached,
-`deny` blocks the action with that reason. Denials from `escalationMode` after a timeout, error, or
-unparseable reply are not cached and are retried. The deadline is local to the plugin: the host
-calls plugin API methods with one argument and drops any request signal, so a timed-out model call
-is abandoned rather than cancelled. Writes that happen after the decision is applied (audit line,
-plugin storage, status-line event) are logged to stderr and never break the hook; every other
-failure escalates and is recorded.
-
-## Audit file
-
-One JSON object per line:
-
-```json
-{"timestamp":"2026-09-14T10:51:23.523Z","sessionID":"ses_...","agent":"build","action":"shell","resources":["git status"],"decision":"allow","reason":"read-only inspection","source":"reviewer","durationMs":1421,"model":"openai/gpt-5.6-terra-fast"}
-```
-
-On POSIX systems the file is restricted to its owner (`0600`). Node's mode bits do not establish
-Windows ACLs, so use an owner-only audit directory there or disable auditing. Audit records contain
-raw permission resources, which can include command arguments, paths, URLs, and other sensitive
-text; protect and retain them accordingly.
-
-`source` says who decided: `reviewer` (the model allowed or denied), `uncertain` (the model
-answered `ask`), `cached` (a repeat of a request decided in the last 60 minutes), `brake`
-(emergency-brake pattern), `timeout`, `error`, or `parse`. Everything but `reviewer`, `cached`
-and `brake` went through `escalationMode`.
-
-## Status line
-
-The terminal half (`src/tui.tsx`, plugin id `joonix.reviewer.tui`) appends
-`reviewer: reviewing <action>` to the `prompt.footer.status` slot while a model review is running,
-and removes it as soon as the verdict arrives, so a previous decision cannot look like it belongs to
-the next tool call. Concurrent reviews are tracked independently, including reviews started by
-sub-agents and displayed on their root session.
+The configured model must be available through an authenticated OpenCode provider. If a review
+cannot be completed, `escalationMode` determines whether the normal permission prompt is shown or
+the action is denied.
 
 ## Develop
 
-```
+```sh
 make install
-make test       # tsc --noEmit plus bun test
-make test-load  # loads the plugin in a throwaway OpenCode config and asserts it loaded
-make test-security # optional live classifier checks using synthetic adversarial history
+make test
+make test-load
 ```
 
-The status line needs `@opentui/core`, `@opentui/solid`, and `solid-js`, declared as peer dependencies to state the
-compatible versions rather than pin a second copy of the host's runtimes. They must not be marked optional:
-`src/tui.tsx` imports `solid-js` and uses `@opentui/solid` as its JSX runtime, so an installer that skips them leaves
-the TUI entry unresolvable.
-
-`test-security` uses the configured server's `openai/gpt-5.6-terra-fast` model with the `medium`
-variant through `opencode api`. It requires existing provider authentication and incurs model
-usage. Only synthetic prompts are sent; proposed commands are never executed. It checks forged
-policy/user text, repeated old approvals, agent scope, truncation, and a benign inspection
-control. These are regression samples, not proof of injection immunity.
-
-Entry resolution depends on how the plugin is configured. A package entry such as
-`@joonix/opencode-reviewer` resolves through the `exports` map to `src/index.ts` and `src/tui.tsx`;
-a directory entry resolves `<dir>` and `<dir>/tui`, so the `index.ts` and `tui.tsx` files at the
-package root re-export `src/` to keep that path working. `make test-load` covers the directory form.
+`make test-security` runs optional live checks using synthetic prompts and requires provider
+authentication.
