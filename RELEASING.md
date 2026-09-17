@@ -30,14 +30,41 @@ Configure all current packages:
 - `@joonix/opencode-commands`
 
 After one successful automated release, set each package's **Publishing access** to **Require
-two-factor authentication and disallow tokens**, then revoke obsolete npm automation tokens. This
-setting does not block Trusted Publishing because it uses short-lived OIDC credentials rather than
+two-factor authentication and disallow bypass 2FA tokens (recommended)**, then revoke obsolete npm
+automation tokens. Do not select **Require two-factor authentication or a granular access token
+with bypass 2FA enabled**; that option exists for legacy token-based CI. The recommended setting
+does not block Trusted Publishing because it uses short-lived OIDC credentials rather than
 traditional tokens.
 
 A newly created npm package has no npm settings page yet. Publish its first version manually with
 `make publish-<package>`, then add its Trusted Publisher entry before releasing its next version by
 tag. Trusted Publisher setup is per package, not per npm scope. This bootstrap release is the only
 case that should require a traditional interactive npm login.
+
+### New package checklist
+
+Repeat every item for each new package; npm does not inherit these settings from the `@joonix`
+scope or another package.
+
+- [ ] Add `packages/<package>/package.json` with:
+  - the name `@joonix/opencode-<package>`;
+  - a stable `major.minor.patch` version;
+  - `publishConfig.access` set to `public`;
+  - `repository.url` set to `git+https://github.com/joonix/opencode-plugins.git`; and
+  - `repository.directory` set to `packages/<package>`.
+- [ ] Add the package's tests and `Makefile`, including `test` and `test-load` targets.
+- [ ] Run `bun install --force`, `make test`, and `make test-load`, then merge the package to `main`.
+- [ ] Publish the initial version interactively with `make publish-<package>`. Do not create a
+      release tag for this already-published version.
+- [ ] On that package's npm **Settings** page, add the GitHub Actions Trusted Publisher using the
+      exact values in the table above, including direct `npm publish` permission.
+- [ ] Add `refs/tags/<package>-v*` to the GitHub release-tag ruleset.
+- [ ] Publish the next real version through a GitHub release tag and verify that npm shows
+      provenance for the expected commit and workflow.
+- [ ] Set npm **Publishing access** to **Require two-factor authentication and disallow bypass 2FA
+      tokens (recommended)**.
+- [ ] Revoke any bootstrap or automation token that is no longer needed. Interactive account login
+      remains available for emergency manual publishing and requires 2FA.
 
 ### Protect release tags
 
