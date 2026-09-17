@@ -8,13 +8,16 @@ PACKAGES := $(patsubst packages/%/Makefile,%,$(wildcard packages/*/Makefile))
 # The per-package targets are deliberately not .PHONY: make skips the implicit
 # rule search for phony targets, which would leave the pattern rules unmatched.
 # No file is ever named after them, so they always run.
-.PHONY: install test test-load check-publish-auth check-publish publish
+.PHONY: install test test-release test-load check-publish-auth check-publish publish
 
 install:
 	$(BUN) install
 
-test:
+test: test-release
 	$(BUN) run --filter '*' test
+
+test-release:
+	$(NODE) --test scripts/release-metadata.test.mjs
 
 test-load: $(PACKAGES:%=test-load-%)
 

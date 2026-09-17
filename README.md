@@ -57,8 +57,9 @@ make test-load
 ```
 
 `make test-load` needs an installed `opencode2` executable and uses disposable configuration and data
-directories. Maintainers publish with `make publish`, which runs the suite and each package's load
-check first. It publishes only packages whose local version is not yet on npm and skips unchanged,
-already-published packages. If local package content differs from its published version, the
-preflight rejects it and suggests the next patch; bump that package and refresh `bun.lock` before
-retrying.
+directories.
+
+Maintainers release packages by creating package-specific Git tags. GitHub Actions tests and packs
+the tagged source, then publishes through npm Trusted Publishing with provenance and no stored npm
+token. See [RELEASING.md](RELEASING.md) for the one-time npm and GitHub setup and the release steps.
+The local `make publish` targets remain available for exceptional manual recovery.
