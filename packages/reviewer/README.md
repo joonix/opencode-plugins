@@ -20,10 +20,19 @@ Prior actions are reduced to sanitized categories and host-recorded completion s
 arguments and tool output are not sent to the reviewer. Missing or oversized effective instructions
 leave the request for human review rather than evaluating against incomplete policy.
 
+The pending action itself is always supplied in full. If it cannot fit the review input budget, the
+plugin leaves it for human review rather than silently truncating it. When the action references a
+file whose contents could materially change the decision, the reviewer may use OpenCode's normal
+read tool. Inspection is limited to three reads, two tool-call rounds, and 32 KiB under the same
+overall review deadline. Other tools are unavailable, and file contents remain untrusted evidence.
+Reads that would prompt under the active permission policy are reported as unavailable instead of
+creating a recursive permission review.
+
 Exact host re-evaluations reuse their verdict. A denial remains sticky for the same action until
 trusted instructions or human authorization changes, preventing probabilistic retry-until-allow.
 An uncertain `ask` verdict is cached for the unchanged action regardless of its tool-call ID or
 later agent activity. It is reconsidered when human authorization or effective instructions change.
+File-informed decisions are not cached, so a changed script cannot inherit an earlier verdict.
 
 The plugin does not hardcode whether deployment, pushing, history rewriting, external comments, or
 similar operations are permitted. Configure those boundaries in the instructions and permission

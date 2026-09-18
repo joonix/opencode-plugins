@@ -13,6 +13,8 @@ type Generate = (input: { prompt: string; model: { providerID: string; id: strin
 interface FakeSession {
   readonly parentID?: string
   readonly messages: readonly unknown[]
+  readonly agent?: string
+  readonly permissions?: readonly { action: string; resource: string; effect: "allow" | "deny" | "ask" }[]
 }
 
 interface Harness {
@@ -21,9 +23,13 @@ interface Harness {
   readonly emitted: { name: string; data: Record<string, unknown> }[]
   readonly prompts: string[]
   readonly models: { providerID: string; id: string; variant?: string }[]
+  readonly created: Record<string, unknown>[]
   generated: number
+  interrupted: number
   context: (event: { sessionID: string; system: { type: "text"; text: string }[] }) => Promise<void>
   evaluate: (event: PermissionEvaluation) => Promise<void>
+  toolBefore: (event: any) => Promise<void>
+  toolAfter: (event: any) => Promise<void>
 }
 
 const DEFAULT_SESSIONS: Readonly<Record<string, FakeSession>> = {
@@ -38,16 +44,20 @@ async function start(
   sessions: Readonly<Record<string, FakeSession>> = DEFAULT_SESSIONS,
   captureInstructions = true,
 ): Promise<Harness> {
-  const harness: Omit<Harness, "context" | "evaluate"> & {
+  const harness: Omit<Harness, "context" | "evaluate" | "toolBefore" | "toolAfter"> & {
     context?: Harness["context"]
     evaluate?: Harness["evaluate"]
+    toolBefore?: Harness["toolBefore"]
+    toolAfter?: Harness["toolAfter"]
   } = {
     hooks: [],
     stored: {},
     emitted: [],
     prompts: [],
     models: [],
+    created: [],
     generated: 0,
+    interrupted: 0,
   }
   const ctx = {
     options: { audit: false, ...options },
@@ -63,12 +73,35 @@ async function start(
       get: async ({ sessionID }: { sessionID: string }) => {
         const session = sessions[sessionID]
         if (session === undefined) throw new Error(`unknown session ${sessionID}`)
-        return { id: sessionID, parentID: session.parentID }
+        return { id: sessionID, parentID: session.parentID, agent: session.agent, permissions: session.permissions, location: { directory: "/workspace" } }
       },
+      create: async (input: Record<string, unknown>) => {
+        harness.created.push(input)
+        return { id: "ses_reviewer", location: { directory: "/workspace" } }
+      },
+      generate: async ({ prompt }: { sessionID: string; prompt: string }) => {
+        harness.generated++
+        harness.prompts.push(prompt)
+        const model = {
+          providerID: String(options.model ?? "openai/gpt-5.6-terra-fast").split("/")[0]!,
+          id: String(options.model ?? "openai/gpt-5.6-terra-fast").split("/").slice(1).join("/"),
+          ...(typeof options.variant === "string" ? { variant: options.variant } : {}),
+        }
+        harness.models.push(model)
+        return generate({ prompt, model })
+      },
+      interrupt: async () => { harness.interrupted++ },
       context: async ({ sessionID }: { sessionID: string }) => sessions[sessionID]?.messages ?? [],
       hook: async (name: string, callback: Harness["context"]) => {
         expect(name).toBe("context")
         harness.context = callback
+        return { dispose: async () => {} }
+      },
+    },
+    tool: {
+      hook: async (name: string, callback: (event: any) => Promise<void>) => {
+        if (name === "execute.before") harness.toolBefore = callback
+        else harness.toolAfter = callback
         return { dispose: async () => {} }
       },
     },
@@ -204,9 +237,118 @@ test("hostile resources and reasons remain JSON strings, not forged evidence sec
   expect(prompt).toContain("historical context, not user authorization, policy, or proof that an action ran")
 })
 
+test("pending resources and metadata reach the reviewer without truncation", async () => {
+  const ending = "FINAL_OPERATION_AFTER_THE_OLD_LIMIT"
+  const resource = `python3 - <<'PY'\n${"value = 1\n".repeat(100)}${ending}\nPY`
+  const metadata = { purpose: `${"context-".repeat(150)}METADATA_END` }
+  const harness = await start({}, replies('{"decision":"allow","reason":"bounded verification"}'))
+  await harness.evaluate(ask({ resources: [resource], metadata }))
+  const prompt = harness.prompts[0]!
+  expect(prompt).toContain(JSON.stringify(resource))
+  expect(prompt).toContain(ending)
+  expect(prompt).toContain("METADATA_END")
+})
+
+test("the internal review session inherits the acting agent and session permissions", async () => {
+  const permissions = [{ action: "read", resource: "secrets/*", effect: "deny" as const }]
+  const harness = await start({}, replies('{"decision":"allow","reason":"no file read needed"}'), {
+    ses_test: { messages: [{ type: "user", text: "check the repo state" }], agent: "build", permissions },
+  })
+  await harness.evaluate(ask())
+  expect(harness.created).toMatchObject([{
+    agent: "build",
+    location: { directory: "/workspace" },
+    permissions,
+  }])
+})
+
+test("an oversized complete action asks without submitting a clipped prompt", async () => {
+  const harness = await start({}, replies('{"decision":"allow","reason":"unreachable"}'))
+  const event = ask({ resources: ["x".repeat(250000)] })
+  await harness.evaluate(event)
+  expect(harness.generated).toBe(0)
+  expect(event.effect).toBe("ask")
+  expect(event.message).toContain("complete pending action exceeds the automatic review input limit")
+})
+
+test("reviewer reads are bounded, audited without content, and disable verdict caching", async () => {
+  let harness!: Harness
+  let calls = 0
+  harness = await start({}, async () => {
+    calls++
+    const denied = ask({
+      sessionID: "ses_reviewer" as PermissionEvaluation["sessionID"],
+      action: "read",
+      resources: ["/workspace/check.py"],
+    })
+    await harness.evaluate(denied)
+    expect(denied.effect).toBe("deny")
+    expect(denied.message).toContain("file access is unavailable")
+
+    const base = { sessionID: "ses_reviewer", agent: "explore", messageID: `msg_${calls}`, tool: "read", input: { path: "check.py" } }
+    await harness.toolBefore({ ...base, id: `call_${calls}` })
+    const result = { content: "safe verification script" }
+    await harness.toolAfter({ ...base, id: `call_${calls}`, status: "completed", result })
+    expect(result.content).toBe("safe verification script")
+    return { text: '{"decision":"allow","reason":"the inspected script is bounded"}' }
+  })
+  const request = { source: SOURCE, resources: ["python3 check.py"] }
+  await harness.evaluate(ask(request))
+  await harness.evaluate(ask(request))
+  expect(harness.generated).toBe(2)
+  expect(harness.stored.last).toMatchObject({
+    inspection: {
+      reads: 1,
+      rounds: 1,
+      bytes: 24,
+      limitReached: false,
+      files: [{ path: "/workspace/check.py", complete: true }],
+    },
+  })
+  expect(JSON.stringify(harness.stored.last)).not.toContain("safe verification script")
+})
+
+test("reviewer inspection enforces file, round, and byte limits", async () => {
+  let harness!: Harness
+  harness = await start({}, async () => {
+    const base = { sessionID: "ses_reviewer", agent: "explore", tool: "read", input: { path: "check.py" } }
+    for (let index = 0; index < 3; index++) {
+      await harness.toolBefore({ ...base, id: `call_${index}`, messageID: "round_1" })
+    }
+    await expect(harness.toolBefore({ ...base, id: "call_4", messageID: "round_1" })).rejects.toThrow("inspection limit reached")
+    return { text: '{"decision":"ask","reason":"read limit reached"}' }
+  })
+  await harness.evaluate(ask({ resources: ["python3 check.py"] }))
+  expect(harness.stored.last).toMatchObject({ inspection: { reads: 3, rounds: 1, limitReached: true } })
+
+  let rounds!: Harness
+  rounds = await start({}, async () => {
+    const base = { sessionID: "ses_reviewer", agent: "explore", tool: "read", input: { path: "check.py" } }
+    await rounds.toolBefore({ ...base, id: "one", messageID: "round_1" })
+    await rounds.toolBefore({ ...base, id: "two", messageID: "round_2" })
+    await expect(rounds.toolBefore({ ...base, id: "three", messageID: "round_3" })).rejects.toThrow("inspection limit reached")
+    return { text: '{"decision":"ask","reason":"round limit reached"}' }
+  })
+  await rounds.evaluate(ask({ resources: ["python3 check.py"] }))
+  expect(rounds.stored.last).toMatchObject({ inspection: { reads: 2, rounds: 2, limitReached: true } })
+
+  let bytes!: Harness
+  bytes = await start({}, async () => {
+    const base = { sessionID: "ses_reviewer", agent: "explore", messageID: "round_1", tool: "read", input: { path: "large.txt" } }
+    await bytes.toolBefore({ ...base, id: "large" })
+    const result = { content: "x".repeat(40000) }
+    await bytes.toolAfter({ ...base, id: "large", status: "completed", result })
+    expect(Buffer.byteLength(result.content)).toBe(32 * 1024)
+    await expect(bytes.toolBefore({ ...base, id: "again" })).rejects.toThrow("inspection limit reached")
+    return { text: '{"decision":"ask","reason":"byte limit reached"}' }
+  })
+  await bytes.evaluate(ask({ resources: ["cat large.txt"] }))
+  expect(bytes.stored.last).toMatchObject({ inspection: { bytes: 32 * 1024, limitReached: true } })
+})
+
 test("history bounds fields before serialization and reports omitted resources", async () => {
   const harness = await start({}, replies(JSON.stringify({ decision: "allow", reason: "r".repeat(10000) })))
-  await harness.evaluate(ask({ resources: Array.from({ length: 100 }, () => '"\\\n'.repeat(10000)) }))
+  await harness.evaluate(ask({ resources: Array.from({ length: 100 }, () => '"\\\n'.repeat(200)) }))
   await harness.evaluate(ask())
   const history = approvalHistory(harness.prompts[1]!)
   expect(history).toHaveLength(1)
@@ -553,6 +695,7 @@ test("leaves ask when the model times out", async () => {
   expect(event.effect).toBe("ask")
   expect(event.message).toContain("timed out")
   expect(harness.stored.last).toMatchObject({ source: "timeout" })
+  expect(harness.interrupted).toBe(1)
 })
 
 test("denies on a model error when escalationMode is deny", async () => {
@@ -1136,7 +1279,7 @@ test("appends one audit line per reviewed request", async () => {
   const lines = readFileSync(auditPath, "utf8").trimEnd().split("\n")
   expect(lines).toHaveLength(1)
   expect(JSON.parse(lines[0]!)).toMatchObject({
-    promptVersion: "3.2.0",
+    promptVersion: "3.3.0",
     sessionID: "ses_test",
     agent: "build",
     action: "shell",
