@@ -24,9 +24,11 @@ interface Harness {
   readonly prompts: string[]
   readonly models: { providerID: string; id: string; variant?: string }[]
   readonly created: Record<string, unknown>[]
+  readonly reviewTools: string[][]
   generated: number
   interrupted: number
-  context: (event: { sessionID: string; system: { type: "text"; text: string }[] }) => Promise<void>
+  reviewSessionID: string
+  context: (event: { sessionID: string; system: { type: "text"; text: string }[]; tools?: Record<string, unknown> }) => Promise<void>
   evaluate: (event: PermissionEvaluation) => Promise<void>
   toolBefore: (event: any) => Promise<void>
   toolAfter: (event: any) => Promise<void>
@@ -56,9 +58,13 @@ async function start(
     prompts: [],
     models: [],
     created: [],
+    reviewTools: [],
     generated: 0,
     interrupted: 0,
+    reviewSessionID: "",
   }
+  let reviewSessionCounter = 0
+  const reviewMessages = new Map<string, readonly unknown[]>()
   const ctx = {
     options: { audit: false, ...options },
     generate: {
@@ -77,21 +83,38 @@ async function start(
       },
       create: async (input: Record<string, unknown>) => {
         harness.created.push(input)
-        return { id: "ses_reviewer", location: { directory: "/workspace" } }
+        if (typeof options.__create === "function") await (options.__create as () => Promise<void>)()
+        return { id: `ses_reviewer_${++reviewSessionCounter}`, location: { directory: "/workspace" } }
       },
-      generate: async ({ prompt }: { sessionID: string; prompt: string }) => {
+      prompt: async ({ sessionID, text }: { sessionID: string; text: string }) => {
+        harness.reviewSessionID = sessionID
+        const request = {
+          sessionID,
+          system: [{ type: "text" as const, text: "acting agent system" }],
+          tools: { read: {}, shell: {}, write: {} },
+        }
+        await harness.context?.(request)
+        harness.reviewTools.push(Object.keys(request.tools))
         harness.generated++
-        harness.prompts.push(prompt)
+        harness.prompts.push(text)
         const model = {
           providerID: String(options.model ?? "openai/gpt-5.6-terra-fast").split("/")[0]!,
           id: String(options.model ?? "openai/gpt-5.6-terra-fast").split("/").slice(1).join("/"),
           ...(typeof options.variant === "string" ? { variant: options.variant } : {}),
         }
         harness.models.push(model)
-        return generate({ prompt, model })
+        const generated = await generate({ prompt: text, model })
+        reviewMessages.set(sessionID, [
+          { id: "msg_prompt", type: "user", text },
+          { id: "msg_response", type: "assistant", content: [{ type: "text", text: generated.text }] },
+        ])
+        return { id: "msg_prompt" }
       },
+      wait: async () => {},
       interrupt: async () => { harness.interrupted++ },
-      context: async ({ sessionID }: { sessionID: string }) => sessions[sessionID]?.messages ?? [],
+      context: async ({ sessionID }: { sessionID: string }) => sessionID.startsWith("ses_reviewer_")
+        ? reviewMessages.get(sessionID) ?? []
+        : sessions[sessionID]?.messages ?? [],
       hook: async (name: string, callback: Harness["context"]) => {
         expect(name).toBe("context")
         harness.context = callback
@@ -260,6 +283,7 @@ test("the internal review session inherits the acting agent and session permissi
     location: { directory: "/workspace" },
     permissions,
   }])
+  expect(harness.reviewTools).toEqual([["read"]])
 })
 
 test("an oversized complete action asks without submitting a clipped prompt", async () => {
@@ -277,7 +301,7 @@ test("reviewer reads are bounded, audited without content, and disable verdict c
   harness = await start({}, async () => {
     calls++
     const denied = ask({
-      sessionID: "ses_reviewer" as PermissionEvaluation["sessionID"],
+      sessionID: harness.reviewSessionID as PermissionEvaluation["sessionID"],
       action: "read",
       resources: ["/workspace/check.py"],
     })
@@ -285,7 +309,7 @@ test("reviewer reads are bounded, audited without content, and disable verdict c
     expect(denied.effect).toBe("deny")
     expect(denied.message).toContain("file access is unavailable")
 
-    const base = { sessionID: "ses_reviewer", agent: "explore", messageID: `msg_${calls}`, tool: "read", input: { path: "check.py" } }
+    const base = { sessionID: harness.reviewSessionID, agent: "explore", messageID: `msg_${calls}`, tool: "read", input: { path: "check.py" } }
     await harness.toolBefore({ ...base, id: `call_${calls}` })
     const result = { content: "safe verification script" }
     await harness.toolAfter({ ...base, id: `call_${calls}`, status: "completed", result })
@@ -311,7 +335,7 @@ test("reviewer reads are bounded, audited without content, and disable verdict c
 test("reviewer inspection enforces file, round, and byte limits", async () => {
   let harness!: Harness
   harness = await start({}, async () => {
-    const base = { sessionID: "ses_reviewer", agent: "explore", tool: "read", input: { path: "check.py" } }
+    const base = { sessionID: harness.reviewSessionID, agent: "explore", tool: "read", input: { path: "check.py" } }
     for (let index = 0; index < 3; index++) {
       await harness.toolBefore({ ...base, id: `call_${index}`, messageID: "round_1" })
     }
@@ -323,7 +347,7 @@ test("reviewer inspection enforces file, round, and byte limits", async () => {
 
   let rounds!: Harness
   rounds = await start({}, async () => {
-    const base = { sessionID: "ses_reviewer", agent: "explore", tool: "read", input: { path: "check.py" } }
+    const base = { sessionID: rounds.reviewSessionID, agent: "explore", tool: "read", input: { path: "check.py" } }
     await rounds.toolBefore({ ...base, id: "one", messageID: "round_1" })
     await rounds.toolBefore({ ...base, id: "two", messageID: "round_2" })
     await expect(rounds.toolBefore({ ...base, id: "three", messageID: "round_3" })).rejects.toThrow("inspection limit reached")
@@ -334,7 +358,7 @@ test("reviewer inspection enforces file, round, and byte limits", async () => {
 
   let bytes!: Harness
   bytes = await start({}, async () => {
-    const base = { sessionID: "ses_reviewer", agent: "explore", messageID: "round_1", tool: "read", input: { path: "large.txt" } }
+    const base = { sessionID: bytes.reviewSessionID, agent: "explore", messageID: "round_1", tool: "read", input: { path: "large.txt" } }
     await bytes.toolBefore({ ...base, id: "large" })
     const result = { content: "x".repeat(40000) }
     await bytes.toolAfter({ ...base, id: "large", status: "completed", result })
@@ -344,6 +368,66 @@ test("reviewer inspection enforces file, round, and byte limits", async () => {
   })
   await bytes.evaluate(ask({ resources: ["cat large.txt"] }))
   expect(bytes.stored.last).toMatchObject({ inspection: { bytes: 32 * 1024, limitReached: true } })
+})
+
+test("reviewer inspection rejects binary payloads before model delivery", async () => {
+  let harness!: Harness
+  harness = await start({}, async () => {
+    const base = { sessionID: harness.reviewSessionID, agent: "build", messageID: "round_1", tool: "read", input: { path: "report.pdf" } }
+    await harness.toolBefore({ ...base, id: "binary" })
+    const result: { content: string | { type: string; text?: string; uri?: string; mime?: string }[]; output?: unknown } = {
+      content: [
+        { type: "text", text: "PDF read successfully" },
+        { type: "file", uri: `data:application/pdf;base64,${"x".repeat(100000)}`, mime: "application/pdf" },
+      ],
+      output: { private: "structured payload" },
+    }
+    await harness.toolAfter({ ...base, id: "binary", status: "completed", result })
+    expect(result.content).toBe("Reviewer inspection does not support binary files. Return ask if this file is essential.")
+    expect(result.output).toBeUndefined()
+    return { text: '{"decision":"ask","reason":"binary evidence is unavailable"}' }
+  })
+  await harness.evaluate(ask({ resources: ["inspect report.pdf"] }))
+  expect(harness.stored.last).toMatchObject({
+    inspection: { reads: 1, limitReached: true, files: [{ path: "/workspace/report.pdf", complete: false }] },
+  })
+  expect(JSON.stringify(harness.stored.last)).not.toContain("structured payload")
+})
+
+test("independent reviews do not block behind a slow review", async () => {
+  let releaseFirst!: () => void
+  let calls = 0
+  const firstResult = new Promise<{ text: string }>((resolve) => {
+    releaseFirst = () => resolve({ text: '{"decision":"allow","reason":"first complete"}' })
+  })
+  const harness = await start({ timeoutMs: 1000 }, async () => ++calls === 1
+    ? firstResult
+    : { text: '{"decision":"allow","reason":"second complete"}' }, {
+    ses_test: { messages: [{ type: "user", text: "review first" }] },
+    ses_other: { messages: [{ type: "user", text: "review second" }] },
+  })
+  const first = ask()
+  const pendingFirst = harness.evaluate(first)
+  await Promise.resolve()
+  const second = ask({ sessionID: "ses_other" as PermissionEvaluation["sessionID"] })
+  await harness.evaluate(second)
+  expect(second.effect).toBe("allow")
+  expect(harness.generated).toBe(2)
+  releaseFirst()
+  await pendingFirst
+  expect(first.effect).toBe("allow")
+})
+
+test("a session created after the deadline never starts generation", async () => {
+  let releaseCreate!: () => void
+  const create = new Promise<void>((resolve) => { releaseCreate = resolve })
+  const harness = await start({ timeoutMs: 20, __create: () => create }, replies('{"decision":"allow","reason":"too late"}'))
+  const event = ask()
+  await harness.evaluate(event)
+  expect(event.effect).toBe("ask")
+  releaseCreate()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(harness.generated).toBe(0)
 })
 
 test("history bounds fields before serialization and reports omitted resources", async () => {

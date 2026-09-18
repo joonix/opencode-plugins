@@ -592,6 +592,10 @@ function textFromResult(result: { readonly content?: string | readonly { readonl
   return result.content.flatMap((part) => part.type === "text" && typeof part.text === "string" ? [part.text] : []).join("\n")
 }
 
+function hasNonTextContent(result: { readonly content?: string | readonly { readonly type: string }[] }): boolean {
+  return Array.isArray(result.content) && result.content.some((part) => part.type !== "text")
+}
+
 function truncateBytes(value: string, maxBytes: number): { text: string; complete: boolean; bytes: number } {
   const bytes = Buffer.byteLength(value)
   if (bytes <= maxBytes) return { text: value, complete: true, bytes }
@@ -607,21 +611,19 @@ function truncateBytes(value: string, maxBytes: number): { text: string; complet
 }
 
 function replaceTextResult(
-  result: { content?: string | Array<{ type: string; text?: string; [key: string]: unknown }> },
+  result: { content?: string | Array<{ type: string; text?: string; [key: string]: unknown }>; output?: unknown },
   text: string,
 ): void {
-  if (typeof result.content === "string") {
-    result.content = text
-    return
-  }
-  if (!Array.isArray(result.content)) return
-  let replaced = false
-  result.content = result.content.map((part) => {
-    if (part.type !== "text") return part
-    if (replaced) return { ...part, text: "" }
-    replaced = true
-    return { ...part, text }
-  })
+  result.content = text
+  result.output = undefined
+}
+
+function finalAssistantText(messages: readonly Message[], promptID: string): string {
+  const promptIndex = messages.findIndex((message) => "id" in message && message.id === promptID)
+  const candidates = messages.slice(promptIndex < 0 ? 0 : promptIndex + 1)
+  const assistant = candidates.findLast((message) => message.type === "assistant")
+  if (assistant === undefined) fail("review session completed without an assistant response")
+  return assistant.content.flatMap((part) => part.type === "text" ? [part.text] : []).join("\n")
 }
 
 function inspection(state: ReviewState): InspectionSummary {
@@ -720,30 +722,7 @@ export default Plugin.define({
     const approvals: Approval[] = []
     const trustedBySession = new Map<string, string>()
     const reviewStates = new Map<string, ReviewState>()
-    const reviewerSessions = new Map<string, Promise<string>>()
-    let reviewQueue = Promise.resolve()
     const rpc = await ctx.rpc.register(Reviewer, {})
-
-    const reviewerSession = async (directory: string, agent: string, permissions: readonly PermissionRule[] | undefined): Promise<string> => {
-      const key = JSON.stringify([directory, agent, permissions])
-      const existing = reviewerSessions.get(key)
-      if (existing !== undefined) return existing
-      const created = ctx.session.create({
-        title: "Permission reviewer",
-        agent,
-        model: options.model,
-        location: { directory },
-        metadata: { internal: "joonix.reviewer" },
-        ...(permissions === undefined ? {} : { permissions }),
-      }).then((session) => session.id)
-      reviewerSessions.set(key, created)
-      try {
-        return await created
-      } catch (error) {
-        reviewerSessions.delete(key)
-        throw error
-      }
-    }
 
     const generateReview = async (
       prompt: string,
@@ -756,19 +735,27 @@ export default Plugin.define({
       if (remainingMs <= 0) throw new TimeoutError(`reviewer timed out after ${options.timeoutMs}ms`)
       let expired = false
       let activeSessionID: string | undefined
-      const scheduled = reviewQueue.then(async () => {
-        if (expired) throw new TimeoutError(`reviewer timed out after ${options.timeoutMs}ms`)
-        activeSessionID = await reviewerSession(state.directory, agent, permissions)
+      return withTimeout(remainingMs, async () => {
+        const session = await ctx.session.create({
+          title: "Permission reviewer",
+          agent,
+          model: options.model,
+          location: { directory: state.directory },
+          metadata: { internal: "joonix.reviewer" },
+          ...(permissions === undefined ? {} : { permissions }),
+        })
+        activeSessionID = session.id
+        if (expired || Date.now() >= deadlineAt) throw new TimeoutError(`reviewer timed out after ${options.timeoutMs}ms`)
         reviewStates.set(activeSessionID, state)
         try {
-          const generated = await ctx.session.generate({ sessionID: activeSessionID, prompt })
-          return generated.text
+          const admitted = await ctx.session.prompt({ sessionID: activeSessionID, text: prompt })
+          await ctx.session.wait({ sessionID: activeSessionID })
+          const messages = await ctx.session.context({ sessionID: activeSessionID })
+          return finalAssistantText(messages, admitted.id)
         } finally {
           reviewStates.delete(activeSessionID)
         }
-      })
-      reviewQueue = scheduled.then(() => {}, () => {})
-      return withTimeout(remainingMs, () => scheduled, async () => {
+      }, async () => {
         expired = true
         if (activeSessionID !== undefined) await ctx.session.interrupt({ sessionID: activeSessionID })
       })
@@ -806,13 +793,16 @@ export default Plugin.define({
     const afterTool = await ctx.tool.hook("execute.after", async (event) => {
       const state = reviewStates.get(event.sessionID)
       if (state === undefined || event.tool !== "read" || event.status !== "completed") return
-      const text = textFromResult(event.result)
+      const binary = hasNonTextContent(event.result)
+      const text = binary
+        ? "Reviewer inspection does not support binary files. Return ask if this file is essential."
+        : textFromResult(event.result)
       const remaining = Math.max(0, MAX_REVIEW_READ_BYTES - state.bytes)
       const bounded = truncateBytes(text, remaining)
       const hostTruncated = event.result.metadata?.truncated === true
-      const complete = bounded.complete && !hostTruncated
+      const complete = bounded.complete && !hostTruncated && !binary
       if (!complete) state.limitReached = true
-      replaceTextResult(event.result as { content?: string | Array<{ type: string; text?: string; [key: string]: unknown }> }, bounded.text)
+      replaceTextResult(event.result as { content?: string | Array<{ type: string; text?: string; [key: string]: unknown }>; output?: unknown }, bounded.text)
       state.bytes += bounded.bytes
 
       const input = typeof event.input === "object" && event.input !== null ? event.input as Record<string, unknown> : {}
