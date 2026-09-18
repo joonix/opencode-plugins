@@ -41,6 +41,8 @@ rules the acting agent already receives, or in the optional owner policy below.
 Scope checks distinguish consequential departures from ordinary work. Bounded setup, inspection,
 synchronization, and reversible housekeeping that stay local to the active workspace and preserve
 existing work do not need to be enumerated merely because they are optional or happen afterward.
+This includes squashing or rebasing unpublished local work and feature branches when doing so cannot
+rewrite trunk, an already integrated change, or shared or published history.
 
 > [!IMPORTANT]
 > This plugin is not a security boundary. An LLM can make incorrect decisions. Keep explicit
