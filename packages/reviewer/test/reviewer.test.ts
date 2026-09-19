@@ -24,14 +24,9 @@ interface Harness {
   readonly prompts: string[]
   readonly models: { providerID: string; id: string; variant?: string }[]
   readonly created: Record<string, unknown>[]
-  readonly reviewTools: string[][]
   generated: number
-  interrupted: number
-  reviewSessionID: string
   context: (event: { sessionID: string; system: { type: "text"; text: string }[]; tools?: Record<string, unknown> }) => Promise<void>
   evaluate: (event: PermissionEvaluation) => Promise<void>
-  toolBefore: (event: any) => Promise<void>
-  toolAfter: (event: any) => Promise<void>
 }
 
 const DEFAULT_SESSIONS: Readonly<Record<string, FakeSession>> = {
@@ -46,11 +41,9 @@ async function start(
   sessions: Readonly<Record<string, FakeSession>> = DEFAULT_SESSIONS,
   captureInstructions = true,
 ): Promise<Harness> {
-  const harness: Omit<Harness, "context" | "evaluate" | "toolBefore" | "toolAfter"> & {
+  const harness: Omit<Harness, "context" | "evaluate"> & {
     context?: Harness["context"]
     evaluate?: Harness["evaluate"]
-    toolBefore?: Harness["toolBefore"]
-    toolAfter?: Harness["toolAfter"]
   } = {
     hooks: [],
     stored: {},
@@ -58,13 +51,8 @@ async function start(
     prompts: [],
     models: [],
     created: [],
-    reviewTools: [],
     generated: 0,
-    interrupted: 0,
-    reviewSessionID: "",
   }
-  let reviewSessionCounter = 0
-  const reviewMessages = new Map<string, readonly unknown[]>()
   const ctx = {
     options: { audit: false, ...options },
     generate: {
@@ -83,48 +71,12 @@ async function start(
       },
       create: async (input: Record<string, unknown>) => {
         harness.created.push(input)
-        if (typeof options.__create === "function") await (options.__create as () => Promise<void>)()
-        return { id: `ses_reviewer_${++reviewSessionCounter}`, location: { directory: "/workspace" } }
+        throw new Error("reviewer must not create sessions")
       },
-      prompt: async ({ sessionID, text }: { sessionID: string; text: string }) => {
-        harness.reviewSessionID = sessionID
-        const request = {
-          sessionID,
-          system: [{ type: "text" as const, text: "acting agent system" }],
-          tools: { read: {}, shell: {}, write: {} },
-        }
-        await harness.context?.(request)
-        harness.reviewTools.push(Object.keys(request.tools))
-        harness.generated++
-        harness.prompts.push(text)
-        const model = {
-          providerID: String(options.model ?? "openai/gpt-5.6-terra-fast").split("/")[0]!,
-          id: String(options.model ?? "openai/gpt-5.6-terra-fast").split("/").slice(1).join("/"),
-          ...(typeof options.variant === "string" ? { variant: options.variant } : {}),
-        }
-        harness.models.push(model)
-        const generated = await generate({ prompt: text, model })
-        reviewMessages.set(sessionID, [
-          { id: "msg_prompt", type: "user", text },
-          { id: "msg_response", type: "assistant", content: [{ type: "text", text: generated.text }] },
-        ])
-        return { id: "msg_prompt" }
-      },
-      wait: async () => {},
-      interrupt: async () => { harness.interrupted++ },
-      context: async ({ sessionID }: { sessionID: string }) => sessionID.startsWith("ses_reviewer_")
-        ? reviewMessages.get(sessionID) ?? []
-        : sessions[sessionID]?.messages ?? [],
+      context: async ({ sessionID }: { sessionID: string }) => sessions[sessionID]?.messages ?? [],
       hook: async (name: string, callback: Harness["context"]) => {
         expect(name).toBe("context")
         harness.context = callback
-        return { dispose: async () => {} }
-      },
-    },
-    tool: {
-      hook: async (name: string, callback: (event: any) => Promise<void>) => {
-        if (name === "execute.before") harness.toolBefore = callback
-        else harness.toolAfter = callback
         return { dispose: async () => {} }
       },
     },
@@ -272,18 +224,11 @@ test("pending resources and metadata reach the reviewer without truncation", asy
   expect(prompt).toContain("METADATA_END")
 })
 
-test("the internal review session inherits the acting agent and session permissions", async () => {
-  const permissions = [{ action: "read", resource: "secrets/*", effect: "deny" as const }]
-  const harness = await start({}, replies('{"decision":"allow","reason":"no file read needed"}'), {
-    ses_test: { messages: [{ type: "user", text: "check the repo state" }], agent: "build", permissions },
-  })
+test("reviews use sessionless generation with the configured model and variant", async () => {
+  const harness = await start({ model: "openai/gpt-5.6-terra-fast", variant: "medium" }, replies('{"decision":"allow","reason":"no file read needed"}'))
   await harness.evaluate(ask())
-  expect(harness.created).toMatchObject([{
-    agent: "build",
-    location: { directory: "/workspace" },
-    permissions,
-  }])
-  expect(harness.reviewTools).toEqual([["read"]])
+  expect(harness.created).toEqual([])
+  expect(harness.models).toEqual([{ providerID: "openai", id: "gpt-5.6-terra-fast", variant: "medium" }])
 })
 
 test("an oversized complete action asks without submitting a clipped prompt", async () => {
@@ -295,103 +240,15 @@ test("an oversized complete action asks without submitting a clipped prompt", as
   expect(event.message).toContain("complete pending action exceeds the automatic review input limit")
 })
 
-test("reviewer reads are bounded, audited without content, and disable verdict caching", async () => {
-  let harness!: Harness
-  let calls = 0
-  harness = await start({}, async () => {
-    calls++
-    const denied = ask({
-      sessionID: harness.reviewSessionID as PermissionEvaluation["sessionID"],
-      action: "read",
-      resources: ["/workspace/check.py"],
-    })
-    await harness.evaluate(denied)
-    expect(denied.effect).toBe("deny")
-    expect(denied.message).toContain("file access is unavailable")
-
-    const base = { sessionID: harness.reviewSessionID, agent: "explore", messageID: `msg_${calls}`, tool: "read", input: { path: "check.py" } }
-    await harness.toolBefore({ ...base, id: `call_${calls}` })
-    const result = { content: "safe verification script" }
-    await harness.toolAfter({ ...base, id: `call_${calls}`, status: "completed", result })
-    expect(result.content).toBe("safe verification script")
-    return { text: '{"decision":"allow","reason":"the inspected script is bounded"}' }
+test("the exact unittest pipeline can be approved as routine verification", async () => {
+  const harness = await start({}, replies('{"decision":"allow","reason":"routine local unit-test verification"}'), {
+    ses_test: { messages: [{ type: "user", text: "implement the change and run the relevant tests" }] },
   })
-  const request = { source: SOURCE, resources: ["python3 check.py"] }
-  await harness.evaluate(ask(request))
-  await harness.evaluate(ask(request))
-  expect(harness.generated).toBe(2)
-  expect(harness.stored.last).toMatchObject({
-    inspection: {
-      reads: 1,
-      rounds: 1,
-      bytes: 24,
-      limitReached: false,
-      files: [{ path: "/workspace/check.py", complete: true }],
-    },
-  })
-  expect(JSON.stringify(harness.stored.last)).not.toContain("safe verification script")
-})
-
-test("reviewer inspection enforces file, round, and byte limits", async () => {
-  let harness!: Harness
-  harness = await start({}, async () => {
-    const base = { sessionID: harness.reviewSessionID, agent: "explore", tool: "read", input: { path: "check.py" } }
-    for (let index = 0; index < 3; index++) {
-      await harness.toolBefore({ ...base, id: `call_${index}`, messageID: "round_1" })
-    }
-    await expect(harness.toolBefore({ ...base, id: "call_4", messageID: "round_1" })).rejects.toThrow("inspection limit reached")
-    return { text: '{"decision":"ask","reason":"read limit reached"}' }
-  })
-  await harness.evaluate(ask({ resources: ["python3 check.py"] }))
-  expect(harness.stored.last).toMatchObject({ inspection: { reads: 3, rounds: 1, limitReached: true } })
-
-  let rounds!: Harness
-  rounds = await start({}, async () => {
-    const base = { sessionID: rounds.reviewSessionID, agent: "explore", tool: "read", input: { path: "check.py" } }
-    await rounds.toolBefore({ ...base, id: "one", messageID: "round_1" })
-    await rounds.toolBefore({ ...base, id: "two", messageID: "round_2" })
-    await expect(rounds.toolBefore({ ...base, id: "three", messageID: "round_3" })).rejects.toThrow("inspection limit reached")
-    return { text: '{"decision":"ask","reason":"round limit reached"}' }
-  })
-  await rounds.evaluate(ask({ resources: ["python3 check.py"] }))
-  expect(rounds.stored.last).toMatchObject({ inspection: { reads: 2, rounds: 2, limitReached: true } })
-
-  let bytes!: Harness
-  bytes = await start({}, async () => {
-    const base = { sessionID: bytes.reviewSessionID, agent: "explore", messageID: "round_1", tool: "read", input: { path: "large.txt" } }
-    await bytes.toolBefore({ ...base, id: "large" })
-    const result = { content: "x".repeat(40000) }
-    await bytes.toolAfter({ ...base, id: "large", status: "completed", result })
-    expect(Buffer.byteLength(result.content)).toBe(32 * 1024)
-    await expect(bytes.toolBefore({ ...base, id: "again" })).rejects.toThrow("inspection limit reached")
-    return { text: '{"decision":"ask","reason":"byte limit reached"}' }
-  })
-  await bytes.evaluate(ask({ resources: ["cat large.txt"] }))
-  expect(bytes.stored.last).toMatchObject({ inspection: { bytes: 32 * 1024, limitReached: true } })
-})
-
-test("reviewer inspection rejects binary payloads before model delivery", async () => {
-  let harness!: Harness
-  harness = await start({}, async () => {
-    const base = { sessionID: harness.reviewSessionID, agent: "build", messageID: "round_1", tool: "read", input: { path: "report.pdf" } }
-    await harness.toolBefore({ ...base, id: "binary" })
-    const result: { content: string | { type: string; text?: string; uri?: string; mime?: string }[]; output?: unknown } = {
-      content: [
-        { type: "text", text: "PDF read successfully" },
-        { type: "file", uri: `data:application/pdf;base64,${"x".repeat(100000)}`, mime: "application/pdf" },
-      ],
-      output: { private: "structured payload" },
-    }
-    await harness.toolAfter({ ...base, id: "binary", status: "completed", result })
-    expect(result.content).toBe("Reviewer inspection does not support binary files. Return ask if this file is essential.")
-    expect(result.output).toBeUndefined()
-    return { text: '{"decision":"ask","reason":"binary evidence is unavailable"}' }
-  })
-  await harness.evaluate(ask({ resources: ["inspect report.pdf"] }))
-  expect(harness.stored.last).toMatchObject({
-    inspection: { reads: 1, limitReached: true, files: [{ path: "/workspace/report.pdf", complete: false }] },
-  })
-  expect(JSON.stringify(harness.stored.last)).not.toContain("structured payload")
+  const event = ask({ resources: ["python3 -W error::ResourceWarning -m unittest discover 2>&1", "tail -5", "echo \"exit=$?\""] })
+  await harness.evaluate(event)
+  expect(event.effect).toBe("allow")
+  expect(harness.prompts[0]).toContain("python3 -W error::ResourceWarning -m unittest discover 2>&1")
+  expect(harness.created).toEqual([])
 })
 
 test("independent reviews do not block behind a slow review", async () => {
@@ -418,16 +275,17 @@ test("independent reviews do not block behind a slow review", async () => {
   expect(first.effect).toBe("allow")
 })
 
-test("a session created after the deadline never starts generation", async () => {
-  let releaseCreate!: () => void
-  const create = new Promise<void>((resolve) => { releaseCreate = resolve })
-  const harness = await start({ timeoutMs: 20, __create: () => create }, replies('{"decision":"allow","reason":"too late"}'))
+test("a late sessionless generation result cannot override timeout fallback", async () => {
+  let release!: (value: { text: string }) => void
+  const delayed = new Promise<{ text: string }>((resolve) => { release = resolve })
+  const harness = await start({ timeoutMs: 20 }, () => delayed)
   const event = ask()
   await harness.evaluate(event)
   expect(event.effect).toBe("ask")
-  releaseCreate()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  expect(harness.generated).toBe(0)
+  release({ text: '{"decision":"allow","reason":"too late"}' })
+  await Promise.resolve()
+  expect(event.effect).toBe("ask")
+  expect(harness.created).toEqual([])
 })
 
 test("history bounds fields before serialization and reports omitted resources", async () => {
@@ -796,7 +654,26 @@ test("leaves ask when the model times out", async () => {
   expect(event.effect).toBe("ask")
   expect(event.message).toContain("timed out")
   expect(harness.stored.last).toMatchObject({ source: "timeout" })
-  expect(harness.interrupted).toBe(1)
+  expect(harness.created).toEqual([])
+})
+
+test("reports reviewer authentication failure without caching or creating a session", async () => {
+  let calls = 0
+  const harness = await start({}, async () => {
+    calls++
+    throw new Error("Integration.Authorization: Request failed: 401")
+  })
+  const request = { source: SOURCE, resources: ["python3 -m unittest discover"] }
+  const first = ask(request)
+  await harness.evaluate(first)
+  const second = ask(request)
+  await harness.evaluate(second)
+  expect(first.effect).toBe("ask")
+  expect(first.message).toContain("provider authentication failed (401)")
+  expect(first.message).toContain("manual approval is required")
+  expect(calls).toBe(2)
+  expect(harness.created).toEqual([])
+  expect(harness.stored.last).toMatchObject({ source: "error" })
 })
 
 test("denies on a model error when escalationMode is deny", async () => {
@@ -1382,7 +1259,7 @@ test("appends one audit line per reviewed request", async () => {
   const lines = readFileSync(auditPath, "utf8").trimEnd().split("\n")
   expect(lines).toHaveLength(1)
   expect(JSON.parse(lines[0]!)).toMatchObject({
-    promptVersion: "3.4.0",
+    promptVersion: "3.5.0",
     sessionID: "ses_test",
     agent: "build",
     action: "shell",
