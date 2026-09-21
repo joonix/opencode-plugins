@@ -102,17 +102,32 @@ package is introduced.
      --generate-notes
    ```
 
-6. Watch the **publish** workflow. If it fails, first determine whether npm published the immutable
-   version. Never move or reuse the release tag. If npm did not publish it, fix the cause and bump
-   to a new version before creating a new release tag. If npm did publish it, preserve the tag and
-   repair only downstream release metadata or documentation.
-7. Open the package version on npm and confirm it shows provenance linked to the expected GitHub
-   commit and workflow.
+6. Watch the **publish** workflow, for example with
+   `gh run watch $(gh run list --workflow publish --limit 1 --json databaseId --jq '.[0].databaseId') --exit-status`.
+   If it fails, first determine whether npm published the immutable version. Never move or reuse
+   the release tag. If npm did not publish it, fix the cause and bump to a new version before
+   creating a new release tag. If npm did publish it, preserve the tag and repair only downstream
+   release metadata or documentation.
+7. The **publish** job's `npm publish --provenance` step already signs a SLSA provenance
+   attestation and logs it to the public Sigstore transparency log; there is nothing left for a
+   human to do in the npm web UI. To spot-check the just-published version from the CLI instead of
+   opening a browser:
+
+   ```sh
+   npm view @joonix/opencode-<package>@<version> --json | jq '{version, tarball: .dist.tarball}'
+   npm audit signatures
+   ```
+
+   `npm audit signatures` reports a verified attestation once the registry has indexed the
+   version, which can lag the workflow's completion by a minute or two. A successful workflow run
+   is the authoritative signal that the release took effect; this check only re-confirms it and is
+   optional.
 
 The workflow rejects malformed tags, tag/package version mismatches, unknown packages, and tags
 that do not point to a commit reachable from `main`.
 
-Consumers can verify npm signatures and attestations for installed dependencies with:
+Consumers can verify npm signatures and attestations for any installed dependency, including these
+packages, the same way:
 
 ```sh
 npm audit signatures
