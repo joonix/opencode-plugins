@@ -30,7 +30,7 @@
     },
     "packages/reviewer": {
       "name": "@joonix/opencode-reviewer",
-      "version": "0.3.2",
+      "version": "0.4.0",
       "dependencies": {
         "@opencode/plugin": "2.0.4",
       },
@@ -45,18 +45,6 @@
         "@opentui/core": ">=0.5.10",
         "@opentui/solid": ">=0.5.10",
         "solid-js": ">=1.9.0",
-      },
-    },
-    "packages/subagent-model": {
-      "name": "@joonix/opencode-subagent-model",
-      "version": "0.3.1",
-      "dependencies": {
-        "@opencode/plugin": "2.0.4",
-      },
-      "devDependencies": {
-        "@types/bun": "1.4.0",
-        "effect": "4.0.0-rc.112",
-        "typescript": "5.8.2",
       },
     },
   },
@@ -186,8 +174,6 @@
     "@joonix/opencode-commands": ["@joonix/opencode-commands@workspace:packages/commands"],
 
     "@joonix/opencode-reviewer": ["@joonix/opencode-reviewer@workspace:packages/reviewer"],
-
-    "@joonix/opencode-subagent-model": ["@joonix/opencode-subagent-model@workspace:packages/subagent-model"],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
