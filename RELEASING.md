@@ -26,7 +26,6 @@ For each package, sign in to npmjs.com, open the package, then go to **Settings*
 Configure all current packages:
 
 - `@joonix/opencode-reviewer`
-- `@joonix/opencode-subagent-model`
 - `@joonix/opencode-commands`
 
 After one successful automated release, set each package's **Publishing access** to **Require
@@ -74,7 +73,6 @@ In the GitHub repository, open **Settings → Rules → Rulesets**, create an ac
 target these patterns:
 
 - `refs/tags/reviewer-v*`
-- `refs/tags/subagent-model-v*`
 - `refs/tags/commands-v*`
 
 Restrict tag updates and deletions. If creation is also restricted, add the maintainer account or
@@ -90,7 +88,6 @@ package is introduced.
 5. Create a GitHub release whose tag is `<package>-v<version>` and whose target is that commit on
    `main`. Examples:
    - `reviewer-v0.3.2`
-   - `subagent-model-v0.3.1`
    - `commands-v0.1.1`
    With GitHub CLI, for example:
 

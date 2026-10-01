@@ -5,7 +5,6 @@ Small, independently installable OpenCode V2 plugins maintained in one Bun works
 | Package | Purpose |
 | --- | --- |
 | `packages/reviewer` | Reviews permission requests with an LLM before prompting the user. |
-| `packages/subagent-model` | Lets a parent select the model and reasoning variant for a child session. |
 | `packages/commands` | Overrides and adds slash commands, starting with an in-place `/clear`. |
 
 ## Install
@@ -14,7 +13,6 @@ From npm, with [OpenCode's plugin manager](https://opencode.ai/v2/docs/plugins#m
 
 ```sh
 opencode plugin add @joonix/opencode-reviewer
-opencode plugin add @joonix/opencode-subagent-model
 opencode plugin add @joonix/opencode-commands
 opencode plugin list
 ```
@@ -44,7 +42,6 @@ mixing one with an npm entry runs two versions of this repository side by side.
 {
   "plugins": [
     { "package": "/path/to/opencode-plugins/packages/reviewer", "options": {} },
-    "/path/to/opencode-plugins/packages/subagent-model",
     "/path/to/opencode-plugins/packages/commands"
   ]
 }
